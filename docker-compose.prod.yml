@@ -1,0 +1,103 @@
+# 第 12 周：生产环境一键编排（应用 + 数据库 + Redis）
+# 用法：
+#   1. 先在同目录建 .env 文件，写入密钥（见下行注释）
+#   2. docker compose -f docker-compose.prod.yml up -d --build
+#
+# .env 文件内容（后台只允许管理员/超级管理员账号登录）：
+#   DEEPSEEK_API_KEY=sk-你的deepseek
+#   DASHSCOPE_API_KEY=sk-你的百炼
+#   AICS_WS_ALLOWED_ORIGINS=https://你的域名   # W25-B2：WebSocket 允许的来源，逗号分隔；留空=放开所有来源
+
+services:
+  app:
+    build: .
+    container_name: aics-app
+    restart: always
+    ports:
+      # 应用只发布到宿主机回环地址，公网必须经过 Caddy，防止绕过 HTTPS/可信代理边界。
+      - "127.0.0.1:8080:8080"
+      # 管理端口（/actuator/**，含无鉴权的 prometheus 指标）：同样只发布到宿主机回环地址，
+      # 供同机 Prometheus 抓取；不发布即公网/内网均不可达。
+      - "127.0.0.1:8081:8081"
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      AICS_CONFIG_ENCRYPTION_KEY: ${AICS_CONFIG_ENCRYPTION_KEY:?请配置32字节随机值的Base64主密钥}
+      # 仅新库首次启动或替换历史默认密码时填写；完成后从 .env 删除。
+      AICS_BOOTSTRAP_ADMIN_PASSWORD: ${AICS_BOOTSTRAP_ADMIN_PASSWORD:-}
+      AICS_WS_ALLOWED_ORIGINS: ${AICS_WS_ALLOWED_ORIGINS:?请配置后台和客户端的HTTPS来源}
+      # 企微 link 卡片的缩略图必须使用公网绝对地址；应用启动时会校验，缺失即拒绝启动。
+      AICS_PUBLIC_BASE_URL: ${AICS_PUBLIC_BASE_URL:?请配置对外HTTPS域名}
+      AICS_BIND_ADDRESS: 0.0.0.0
+      TZ: Asia/Shanghai
+      # 2G 物理内存 + 3G swap：限制 JVM 堆，避免与 postgres/redis 抢内存被 OOM kill。
+      JAVA_TOOL_OPTIONS: -Xmx768m -XX:MaxMetaspaceSize=256m -Duser.timezone=Asia/Shanghai
+      # 仅因宿主机端口已绑定 127.0.0.1、入口固定为本机 Caddy，才信任转发头。
+      AICS_FORWARD_HEADERS_STRATEGY: FRAMEWORK
+      SPRING_PROFILES_ACTIVE: prod
+      # 容器内数据库/Redis 用服务名访问（Spring 宽松绑定自动映射到 yml 配置）
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aics
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?请配置数据库密码}
+      SPRING_DATA_REDIS_HOST: redis
+    volumes:
+      - uploads:/app/uploads        # 图片素材持久化
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 健康检查：管理端口（8081）查 health 指示器（数据源/Redis），应用端口（8080）确认业务可服务；
+    # 任一失败即 unhealthy，docker ps 显示 unhealthy，配合 Caddy 主动健康检查摘流量
+    # （应用假死、进程不退出时 restart 不生效，靠探活发现）。
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/actuator/health && curl -sf -o /dev/null http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aics-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请配置数据库密码}
+      POSTGRES_DB: aics
+      TZ: Asia/Shanghai
+    # 注意：不暴露 5432 到公网，只在容器网络内访问
+    # 第 33 周：显式健康检查，让 app 的 depends_on 等库真正就绪后再连（根治偶发抢连崩溃）。
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "aics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - ./db-init:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: aics-redis
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+    # 第 33 周：显式健康检查，让 app 的 depends_on 等 Redis 就绪。
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redisdata:/data
+
+volumes:
+  # 显式固定卷名（aics_ 前缀）：即使忘带 `-p aics`，也不会因项目名变化而新建空卷，
+  # 避免复用旧卷时误建空库导致客户数据/会话/知识库"全丢"的部署事故。
+  pgdata:
+    name: aics_pgdata
+  redisdata:
+    name: aics_redisdata
+  uploads:
+    name: aics_uploads

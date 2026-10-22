@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+target
+node_modules
+uploads
+eval
+__pycache__
+*.py[cod]
+*.log
+*.iml
+.env
+.env.*
+!*.example

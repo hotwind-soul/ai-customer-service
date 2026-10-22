@@ -1,0 +1,117 @@
+{
+  "startedAt": "2026-08-20T12:51:11.671Z",
+  "base": "ws://127.0.0.1:8080/ws/chat",
+  "knowledge": [],
+  "extra": [],
+  "flows": [
+    {
+      "name": "Flow1 价格继承（抗衰→全脸）",
+      "expect": [
+        "抗衰",
+        "688",
+        "转人工"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "msg": "抗衰多少钱",
+          "reply": "抗衰活动价298元（原价1980元），8元订金可抵扣，到店再付290元。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "f1f28010-cb3e-4374-b11a-aa4d83795611"
+        },
+        {
+          "turn": 2,
+          "msg": "那全脸呢",
+          "reply": "全脸7个部位是688元，包括抬头纹、川字纹、法令纹、鱼尾纹、苹果肌、下颚线和口角囊袋哦。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "f1f28010-cb3e-4374-b11a-aa4d83795611"
+        },
+        {
+          "turn": 3,
+          "msg": "订金多少",
+          "reply": "抗衰活动价298元（原价1980元），8元订金可抵扣，到店再付290元。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "f1f28010-cb3e-4374-b11a-aa4d83795611"
+        },
+        {
+          "turn": 4,
+          "msg": "转人工",
+          "reply": "好的，已为您排队转接人工客服。客服在线时间是每天09:00-22:00，上班后会按顺序为您接入，请稍等一下哦。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "f1f28010-cb3e-4374-b11a-aa4d83795611"
+        }
+      ]
+    },
+    {
+      "name": "Flow2 项目继承（淡斑→做一次多少钱→疼不疼）",
+      "expect": [
+        "淡斑",
+        "198",
+        "麻药|痛|感受"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "msg": "我想了解淡斑",
+          "reply": "我给您介绍一下，咱们专业研究斑点，具体方案要结合斑点类型、时间和个人情况评估，淡斑活动价198元（原价1980元）支付订金后可抵扣，到店再付190元即可，接车服务请按所在城市和具体门店确认🚗我们是全国连锁品牌哦，您是在哪个城市哪个区呀，我把离您最近的门店位置发给您~\n\n具体效果因人而异，活动名额、期限和适用条件以门店当期政策确认为准。\n\n项目效果图和当前有效的优惠海报也一起发给您了，您可以对照看看。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "85e00140-4111-4975-86ee-a39a193ea6a3"
+        },
+        {
+          "turn": 2,
+          "msg": "那做一次要多少钱呢",
+          "reply": "淡斑活动价198元（原价1980元），8元订金可抵扣，到店再付190元。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "85e00140-4111-4975-86ee-a39a193ea6a3"
+        },
+        {
+          "turn": 3,
+          "msg": "做的时候疼不疼",
+          "reply": "疼痛感受和是否需要麻药会因具体项目及个人情况而不同，不能在线承诺完全不痛或一定不用麻药；请在操作前由专业人员确认。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "85e00140-4111-4975-86ee-a39a193ea6a3"
+        }
+      ]
+    },
+    {
+      "name": "Flow3 议价流（太贵→能便宜吗→200行不行）",
+      "expect": [
+        "不降价|订金|活动价",
+        "不承诺200"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "msg": "淡斑太贵了",
+          "reply": "目前价格以已发布的活动政策和门店当期确认为准，我不能擅自承诺额外优惠。您如果需要，我可以再请人工客服帮您核实。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "7a7f052a-e4bc-4b6c-85cd-fbb333afb064"
+        },
+        {
+          "turn": 2,
+          "msg": "能便宜点不",
+          "reply": "好的，已为您排队转接人工客服。客服在线时间是每天09:00-22:00，上班后会按顺序为您接入，请稍等一下哦。",
+          "forwarded": false,
+          "error": null,
+          "conversationId": "7a7f052a-e4bc-4b6c-85cd-fbb333afb064"
+        },
+        {
+          "turn": 3,
+          "msg": "200块行不行",
+          "reply": "消息已记录，您仍在人工客服排队中",
+          "forwarded": true,
+          "error": null,
+          "conversationId": "7a7f052a-e4bc-4b6c-85cd-fbb333afb064"
+        }
+      ]
+    }
+  ]
+}

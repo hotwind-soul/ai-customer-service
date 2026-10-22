@@ -1,0 +1,15 @@
+{
+    // 关闭 Eclipse JDT 的空值分析：Spring 框架大量 API 标注 @NonNull，
+    // 匿名 Lambda/内部类会触发成百条 "Null type safety" 误报警告，干扰真正的代码问题。
+    "java.compile.nullAnalysis.mode": "disabled",
+    // Maven 面板树形展示
+    "maven.view": "hierarchical",
+    // 显式开启 Maven 项目导入（MAVEN 面板识别项目的开关）
+    "java.import.maven.enabled": true,
+    // Maven 可执行文件路径
+    "maven.executable.path": "C:\\Users\\JT\\tools\\apache-maven-3.9.16\\bin\\mvn.cmd",
+    // 面板执行 lifecycle 时附带项目自带 settings.xml（走阿里云镜像）
+    "maven.executable.options": "-s settings.xml",
+    // 项目配置变更时自动重新导入
+    "java.configuration.updateBuildConfiguration": "automatic"
+}

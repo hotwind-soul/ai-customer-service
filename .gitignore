@@ -1,0 +1,32 @@
+# W25-Nit：仓库卫生——忽略构建产物/IDE 配置/本地数据
+target/
+.idea/
+node_modules/
+*.iml
+*.class
+__pycache__/
+*.py[cod]
+uploads/
+backups/
+*.log
+.DS_Store
+
+# 本地/生产密钥与环境配置绝不能入库；只提交无敏感值的模板。
+.env
+.env.*
+!.env.example
+*.local
+
+# 本地数据库备份、迁移包不得入库。
+# 注：settings.xml 是项目共享的阿里云 Maven 镜像（无密钥、无机器专用路径），
+# Dockerfile 多阶段构建依赖它（COPY settings.xml .）才能让国内服务器不从被墙的 Maven Central 拉包；
+# 故必须入库，否则干净 clone 后 docker build 会 COPY 失败。
+*.dump
+*.sql.gz
+uploads.zip
+
+# 本地工作记忆和评测生成结果不属于项目源码。
+MEMORY.md
+.workbuddy/
+eval/eval_run_output.txt
+eval/评测报告.xlsx

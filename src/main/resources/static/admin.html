@@ -1,0 +1,2219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能客服 · AI 运营后台</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="stylesheet" href="/css/ui.css">
+<link rel="stylesheet" href="/css/admin-theme.css">
+<link rel="stylesheet" href="/css/admin-page.css">
+</head>
+<body>
+<!-- a11y：跳过链接（W26：WCAG 2.4.1） -->
+<a class="skip-link" href="#main-content">跳到主内容</a>
+<div id="app" v-cloak>
+  <!-- W26-M1：登录页（替代浏览器 prompt 输入口令） -->
+  <div v-if="!token" class="login-wrap">
+    <div class="login-box">
+      <div class="login-badge">昇</div>
+      <h1>智能客服 · AI 运营后台</h1>
+      <p class="login-sub">AI 知识、素材、调试与质量管理</p>
+      <div v-if="loginErr" class="login-err" role="alert">{{ loginErr }}</div>
+      <form @submit.prevent="doLogin">
+        <label class="field-label" for="admin-username">管理员账号</label>
+        <input id="admin-username" v-model="loginUsername" autocomplete="username" placeholder="请输入管理员或超级管理员账号">
+        <label class="field-label" for="admin-password">密码</label>
+        <input id="admin-password" v-model="loginPassword" type="password" autocomplete="current-password" placeholder="请输入密码">
+        <button class="login-submit" type="submit">进入后台</button>
+      </form>
+    </div>
+  </div>
+  <template v-else>
+  <div class="admin-shell">
+    <button v-if="navOpen" type="button" class="admin-backdrop" aria-label="关闭后台导航" @click="navOpen=false"></button>
+    <aside class="admin-sidebar" :class="{open:navOpen}">
+      <div class="admin-brand"><span class="admin-brand-badge">昇</span><div><strong>AI 运营中心</strong><span>智能客服</span></div></div>
+      <nav class="admin-nav" aria-label="后台功能导航">
+        <section v-for="group in tabGroups" :key="group.name" class="nav-group">
+          <h2 class="nav-group-title" role="button" tabindex="0"
+              :aria-expanded="!collapsedGroups[group.name]"
+              @click="toggleGroup(group.name)"
+              @keydown.enter.prevent="toggleGroup(group.name)"
+              @keydown.space.prevent="toggleGroup(group.name)">
+            <span class="nav-caret" :class="{collapsed: collapsedGroups[group.name]}"></span>
+            {{ group.name }}
+          </h2>
+          <button v-for="t in group.items" v-show="!collapsedGroups[group.name]" :key="t.key" type="button" :class="{active:tab===t.key}" :aria-current="tab===t.key ? 'page' : null" @click="switchTab(t.key)">{{ t.name }}</button>
+        </section>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-role"><span>{{ currentUser.name || currentUser.username }}</span><span class="role-pill">{{ roleLabel }}</span></div>
+        <button type="button" @click="toggleTheme" :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'">{{ isDark ? '☀ 浅色' : '☾ 深色' }}</button>
+        <button type="button" @click="resetToken">退出登录</button>
+      </div>
+    </aside>
+    <section class="admin-workspace" id="main-content" tabindex="-1">
+      <header class="admin-toolbar">
+        <button type="button" class="admin-menu" aria-label="打开后台导航" @click="navOpen=true">☰</button>
+        <div class="admin-toolbar-title"><h1>{{ currentTab.name }}</h1></div>
+        <a class="btn btn-plain admin-help-link" :href="currentHelpUrl" target="_blank" rel="opener" title="打开当前模块的使用说明">帮助中心 ↗</a>
+      </header>
+      <main class="container">
+    <div v-if="toast" class="toast" role="status" aria-live="polite">{{ toast }}</div>
+
+    <!-- 知识库 -->
+    <div v-show="tab === 'kb'" class="card">
+      <h2>知识库文档（共 {{ kb.totalChunks || 0 }} 片）</h2>
+      <div class="kb-index-panel">
+        <div class="kb-index-main">
+          <span class="kb-index-icon" aria-hidden="true">↻</span>
+          <div class="kb-index-copy">
+            <strong>知识向量索引</strong>
+            <div v-if="kbReindexTask" class="kb-index-status" role="status" aria-live="polite">
+              <b :class="{failed:kbReindexTask.status==='failed'}">{{ kbReindexStatusText }}</b>
+              <span v-if="Number(kbReindexTask.total_chunks || 0) > 0"> · {{ Number(kbReindexTask.processed_chunks || 0) }}/{{ Number(kbReindexTask.total_chunks || 0) }} 片</span>
+              <span v-if="kbReindexTask.error" class="failed"> · {{ kbReindexTask.error }}</span>
+              <div v-if="kbReindexRunning && Number(kbReindexTask.total_chunks || 0) > 0" class="kb-index-progress" aria-hidden="true"><span :style="{width: Math.min(100, Math.round(Number(kbReindexTask.processed_chunks || 0) / Number(kbReindexTask.total_chunks || 1) * 100)) + '%'}"></span></div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary" :disabled="kbReindexRunning" @click="reindexKb">{{ kbReindexRunning ? '正在重建…' : '重建全部向量' }}</button>
+      </div>
+      <div class="resource-scope-bar">
+        <label><span>新资源所属企业</span><select v-model="resourceScope.tenantId" @change="onResourceTenantChange"><option value="">全局共享</option><option v-for="tenant in resourceScopeCatalog.tenants" :key="'kb-t-'+tenant.id" :value="String(tenant.id)">{{ tenant.name }}</option></select></label>
+        <label><span>所属微信客服号</span><select v-model="resourceScope.kfAccountId" :disabled="!resourceScope.tenantId"><option value="">企业内全部客服号共享</option><option v-for="account in resourceAccounts" :key="'kb-k-'+account.id" :value="String(account.id)">{{ account.name }}</option></select></label>
+        <div class="resource-scope-summary"><strong>当前归属：{{ selectedResourceScopeLabel }}</strong><br>下面新上传的文档会按该范围供 AI 检索；已有文档的归属不会被改变。</div>
+      </div>
+      <div class="form-row">
+        <input type="file" ref="kbFile" aria-label="选择知识库文档">
+        <button class="btn btn-primary" :disabled="uploadingKb" @click="uploadKb">{{ uploadingKb ? '上传中…' : '上传文档' }}</button>
+        <span class="muted">支持 pdf / docx / xlsx / txt / md；price.xlsx 会批量导入项目中心，不调用向量模型</span>
+      </div>
+      <!-- 内容检索：按关键词即时查找切片（跨发布状态），不依赖向量模型 -->
+      <div class="kb-search-bar">
+        <input type="search" v-model="kbSearch" @keyup.enter="searchKbContent" aria-label="按关键词搜索知识库内容" placeholder="搜索知识库内容，如：退款、营业时间、禁忌">
+        <button class="btn btn-primary" :disabled="kbSearching" @click="searchKbContent">{{ kbSearching ? '搜索中…' : '搜索' }}</button>
+        <button v-if="kbSearchResults.length" class="btn btn-plain" @click="clearKbSearch">清除结果</button>
+        <span v-if="kbSearchResults.length" class="muted">命中 {{ kbSearchResults.length }} 条切片</span>
+      </div>
+      <div v-if="kbSearchResults.length" class="kb-search-results">
+        <div v-for="r in kbSearchResults" :key="r.id" class="kb-search-item" @click="jumpToSearchChunk(r)">
+          <div class="kb-search-meta">
+            <span class="kb-cat">{{ r.doc_name }}</span>
+            <span class="muted">#{{ r.chunk_index }}</span>
+            <span class="chip" :class="'status-' + (r.chunk_status || r.doc_status)">{{ docStatusLabel(r.chunk_status || r.doc_status) }}</span>
+            <span v-if="r.knowledge_type" class="muted">{{ r.knowledge_type }}</span>
+            <span v-if="r.governance_reason && r.governance_override" class="chip status-published">动态价格 · 人工启用</span>
+            <span v-else-if="r.governance_reason" class="chip status-draft">动态价格 · 系统停用</span>
+          </div>
+          <div class="kb-search-snippet" v-html="kbHighlight(r.content)"></div>
+        </div>
+      </div>
+      <table>
+        <tr><th scope="col">文档名</th><th scope="col">归属</th><th scope="col">内容条数</th><th scope="col">操作</th></tr>
+        <tr v-if="knowledgeDocuments.length === 0"><td colspan="4" class="empty-row">暂无文档 · 在上方选择文件点「上传文档」，AI 即可检索该内容</td></tr>
+        <tr v-for="d in pagedKnowledgeDocuments" :key="d.id || (d.doc_name + '-' + d.tenant_id + '-' + d.kf_account_id)">
+          <td>{{ d.doc_name }}</td>
+          <td><span class="chip">{{ resourceScopeLabel(d) }}</span></td>
+          <td>{{ d.chunk_count || 0 }}</td>
+          <td>
+            <button class="btn btn-primary" @click="openKbEditor(d)">编辑</button>
+            <button class="btn btn-danger" @click="deleteKb(d)">删除</button>
+          </td>
+        </tr>
+      </table>
+      <div v-if="totalKbPages > 1" class="pager">
+        <button class="btn btn-plain" :disabled="kbPage <= 1" @click="kbPage--">上一页</button>
+        <span class="muted">第 {{ kbPage }} / {{ totalKbPages }} 页 · 共 {{ knowledgeDocuments.length }} 个文档</span>
+        <button class="btn btn-plain" :disabled="kbPage >= totalKbPages" @click="kbPage++">下一页</button>
+        <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.kb" min="1" :max="totalKbPages" @keyup.enter="gotoPage('kb','kbPage','totalKbPages')"> 页<button class="btn btn-plain" @click="gotoPage('kb','kbPage','totalKbPages')">前往</button></span>
+      </div>
+
+      <!-- 在线编辑器（浮层弹窗：点"编辑"即居中弹出，不用滚动到列表底部） -->
+      <div v-if="kbEditDoc" class="kb-mask" @click.self="closeKbEditor">
+        <div class="kb-modal" role="dialog" aria-modal="true" aria-label="知识库编辑器">
+          <div class="kb-modal-head">
+            <h2>正在编辑：《{{ kbEditDoc }}》（{{ kbChunks.length }} 条）</h2>
+            <button class="btn btn-plain" @click="closeKbEditor">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div v-for="c in pagedKbChunks" :key="c.id" class="kb-item" @keydown.ctrl.s.prevent="c.knowledge_type !== 'offer' && saveChunk(c)">
+              <div class="kb-item-toolbar">
+                <span class="muted">#{{ c.chunk_index }}</span>
+                <span class="chip" :class="'status-' + c.status">{{ docStatusLabel(c.status) }}</span>
+                <span class="chip">{{ c.knowledge_type === 'faq' ? 'FAQ' : (c.knowledge_type === 'offer' ? '结构化报价' : '参考资料') }}</span>
+                <span v-if="c.governance_reason && c.governance_override" class="chip status-published">动态价格 · 人工启用</span>
+                <span v-else-if="c.governance_reason" class="chip status-draft">动态价格 · 系统停用</span>
+                <span v-if="kbChunkDirty(c)" class="kb-unsaved">● 有未保存修改</span>
+                <span class="kb-item-spacer"></span>
+                <button v-if="c.knowledge_type !== 'offer'" class="btn btn-primary" @click="saveChunk(c)">保存</button>
+                <button v-if="c.knowledge_type !== 'offer' && c.status !== 'published'" class="btn btn-plain" @click="setChunkStatus(c, 'published')">{{ c.governance_reason ? '人工启用' : '启用' }}</button>
+                <button v-else-if="c.knowledge_type !== 'offer'" class="btn btn-plain" @click="setChunkStatus(c, 'disabled')">停用</button>
+                <button class="btn btn-plain" @click="openKbTest(c)">{{ kbTestChunkId === c.id ? '收起测试' : '测试效果' }}</button>
+                <button v-if="c.knowledge_type === 'reference'" class="btn btn-plain" @click="kbPreviewId = (kbPreviewId === c.id ? '' : c.id)">{{ kbPreviewId === c.id ? '隐藏格式' : '格式预览' }}</button>
+                <button v-if="c.knowledge_type !== 'offer'" class="btn btn-danger" @click="deleteChunk(c.id)">删除</button>
+              </div>
+              <div v-if="c.governance_reason" class="kb-governance-note">
+                <strong>{{ c.governance_override ? '已由管理员人工启用：' : '系统建议停用：' }}</strong>{{ c.governance_reason }}。
+                <span v-if="c.governance_override">该内容目前会参与客户检索；如价格变化，请及时更新或停用。</span>
+                <span v-else>你可以修改内容后保存，也可以确认风险后点击“人工启用”。</span>
+              </div>
+              <div v-if="c.knowledge_type === 'faq'" class="kb-faq-editor">
+                <label class="wide"><span>客户常见问题</span><input v-model="c.faq_question" maxlength="500" placeholder="例如：做完多久可以恢复？"></label>
+                <label class="wide"><span>标准回答</span><textarea v-model="c.faq_answer" :rows="kbRows(c.faq_answer)" maxlength="10000" placeholder="填写明确、可审核的标准回答"></textarea></label>
+                <label><span>项目 / 分类</span><input v-model="c.faq_category" maxlength="100" placeholder="例如：抗衰；可留空"></label>
+              </div>
+              <div v-else-if="c.knowledge_type === 'offer'" class="kb-test-hint" style="margin:0">
+                结构化报价只读，请在“项目中心”维护。
+              </div>
+              <textarea v-else v-model="c.content" :rows="kbRows(c.content)" aria-label="参考资料内容" class="kb-textarea"></textarea>
+              <div v-if="kbPreviewId === c.id && c.knowledge_type === 'reference'" class="kb-preview kb-format-preview" v-html="renderMd(c.content)"></div>
+
+              <section v-if="kbTestChunkId === c.id" class="kb-test-panel" aria-label="知识效果测试">
+                <div class="kb-test-head">
+                  <div><strong>客户问题测试</strong><p>测试读取已保存内容；默认只检查路由和召回，不写会话、不创建业务数据。</p></div>
+                  <button class="btn btn-plain" @click="closeKbTest">关闭</button>
+                </div>
+                <div class="kb-test-query">
+                  <label><span>模拟客户问题</span><input v-model="kbTestQuestion" maxlength="1000" placeholder="输入客户可能会问的问题" @keyup.enter="runKbChunkTest(c, false)"></label>
+                  <button class="btn btn-plain" :disabled="kbTestRunning" @click="runKbChunkTest(c, false)">{{ kbTestRunning ? '测试中…' : '只测试召回' }}</button>
+                  <button class="btn btn-primary" :disabled="kbTestRunning" @click="runKbChunkTest(c, true)">{{ kbTestRunning ? '运行中…' : '生成最终回答' }}</button>
+                </div>
+                <div v-if="kbTestError" class="kb-test-hint" style="color:var(--danger)">{{ kbTestError }}</div>
+                <template v-if="kbTestResult">
+                  <div class="kb-test-summary">
+                    <div class="kb-test-stat"><span>线上状态</span><strong>{{ c.status === 'published' && (c.has_embedding || c.knowledge_type === 'offer') ? '可参与回答' : '不会参与检索' }}</strong></div>
+                    <div class="kb-test-stat"><span>最终路由</span><strong>{{ debugTypeName(kbTestResult.replyType) }}</strong></div>
+                    <div class="kb-test-stat"><span>当前切片</span><strong>{{ kbActiveTestHit ? '召回第 ' + kbActiveTestHit.rank + ' 名' : '未召回' }}</strong></div>
+                    <div class="kb-test-stat"><span>采用结果</span><strong>{{ kbActiveTestHit ? (kbActiveTestHit.accepted ? '已采用' : '已过滤') : '未进入候选' }}</strong></div>
+                  </div>
+                  <div v-if="['FACT','INTRO'].includes(kbTestResult.replyType) && !kbActiveTestHit" class="kb-test-hint">本次问题由项目中心实时数据优先处理，因此没有使用这条知识。</div>
+                  <div v-else-if="kbTestResult.replyType === 'AI' && !kbTestResult.answer" class="kb-test-hint">知识检索和 Prompt 已完成，本次没有调用最终生成模型。点击“生成最终回答”可查看客户实际回复。</div>
+                  <div v-if="kbTestResult.answer" class="kb-test-answer"><strong style="display:block;margin-bottom:5px">客户实际回复</strong>{{ kbTestResult.answer }}</div>
+                  <div v-else-if="kbTestResult.routeSummary" class="kb-test-answer">{{ kbTestResult.routeSummary }}</div>
+                  <details v-if="kbTestResult.turnTrace" class="quality-trace"><summary>查看权威来源与决策追踪</summary><pre>{{ formatDecisionTrace(kbTestResult.turnTrace) }}</pre></details>
+                  <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+                    <span class="muted">候选 {{ (kbTestResult.hits || []).length }} 条 · 采用 {{ kbTestResult.acceptedCount || 0 }} 条 · {{ kbTestResult.durationMs || 0 }} ms</span>
+                    <button v-if="role === 'super_admin' || permissions.includes('ai.debug')" class="btn btn-plain" @click="openKbTestInLab">在调优中心查看同次结果</button>
+                  </div>
+                </template>
+              </section>
+            </div>
+            <div v-if="totalKbChunkPages > 1" class="pager">
+              <button class="btn btn-plain" :disabled="kbChunkPage <= 1" @click="kbChunkPage--">上一页</button>
+              <span class="muted">第 {{ kbChunkPage }} / {{ totalKbChunkPages }} 页 · 共 {{ kbChunks.length }} 条</span>
+              <button class="btn btn-plain" :disabled="kbChunkPage >= totalKbChunkPages" @click="kbChunkPage++">下一页</button>
+              <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.kbChunk" min="1" :max="totalKbChunkPages" @keyup.enter="gotoPage('kbChunk','kbChunkPage','totalKbChunkPages')"> 页<button class="btn btn-plain" @click="gotoPage('kbChunk','kbChunkPage','totalKbChunkPages')">前往</button></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 项目中心：项目、价格、别名、图片和门店的唯一维护入口 -->
+    <div v-show="tab === 'projects'" class="card">
+      <div class="settings-title-row">
+        <div><h2>项目中心（主项目 {{ projectRootCount }} · 子项目 {{ projectSubprojectCount }}）</h2></div>
+        <button class="btn btn-primary" @click="openNewProject">＋ 新增项目</button>
+      </div>
+      <div class="resource-scope-bar">
+        <label><span>新项目所属企业</span><select v-model="resourceScope.tenantId" @change="onResourceTenantChange"><option value="">全局共享</option><option v-for="tenant in resourceScopeCatalog.tenants" :key="'project-t-'+tenant.id" :value="String(tenant.id)">{{ tenant.name }}</option></select></label>
+        <label><span>所属微信客服号</span><select v-model="resourceScope.kfAccountId" :disabled="!resourceScope.tenantId"><option value="">企业内全部客服号共享</option><option v-for="account in resourceAccounts" :key="'project-k-'+account.id" :value="String(account.id)">{{ account.name }}</option></select></label>
+        <div class="resource-scope-summary"><strong>当前归属：{{ selectedResourceScopeLabel }}</strong><br>仅影响新建项目；编辑已有项目不会改变归属。</div>
+      </div>
+      <table>
+        <tr><th>项目</th><th>归属</th><th>别名</th><th>当前价格</th><th>图片</th><th>门店</th><th>状态</th><th>操作</th></tr>
+        <tr v-if="serviceProjects.length === 0"><td colspan="8" class="empty-row">暂无项目 · 点右上角「＋ 新增项目」建立第一个项目（名称 + 别名 + 价格）</td></tr>
+        <tr v-for="project in serviceProjects" :key="project.id" :class="{'project-row-child':project.parentId}">
+          <td><div class="project-name-cell"><span v-if="project.parentId" class="project-branch" aria-hidden="true">↳</span><div class="project-name-copy"><div class="project-name-line"><strong>{{ project.name }}</strong><span class="project-kind" :class="{child:project.parentId}">{{ project.parentId ? '子项目' : '主项目' }}</span></div><span v-if="project.parentId" class="project-parent-copy">归入 {{ project.parentName || '主项目 #' + project.parentId }}</span><span class="muted">{{ project.code }}</span></div></div></td>
+          <td><span class="chip">{{ resourceScopeLabel(project) }}</span></td>
+          <td class="ellipsis-wide" :title="(project.aliases || []).join('、')">{{ (project.aliases || []).join('、') }}</td>
+          <td>{{ project.offer && project.offer.activityPrice != null ? project.offer.activityPrice + ' 元' : '待维护' }}</td>
+          <td>{{ (project.imageIds || []).length }} 张</td><td>{{ (project.storeIds || []).length }} 家</td>
+          <td><span class="ai-status" :class="project.status === 'published' ? 'matched' : (project.status === 'disabled' ? 'failed' : 'pending')">{{ projectStatusLabel(project.status) }}</span></td>
+          <td><button class="btn btn-plain" @click="startProjectEdit(project)">编辑</button><button v-if="project.status !== 'disabled'" class="btn btn-danger" @click="disableProject(project)">停用</button></td>
+        </tr>
+      </table>
+
+      <div v-if="projectDialog" class="kb-mask" tabindex="-1" @click.self="closeProjectEditor" @keydown.esc="closeProjectEditor">
+        <form class="kb-modal project-editor" role="dialog" aria-modal="true" aria-labelledby="project-editor-title" @submit.prevent="saveProject">
+          <header class="project-editor-head">
+            <div class="project-editor-title">
+              <span class="project-editor-mark">项目</span>
+              <div><h2 id="project-editor-title">{{ projectDraft.id ? '编辑项目' : '新增项目' }}</h2></div>
+            </div>
+            <button type="button" class="btn btn-plain project-editor-close" :disabled="projectSaving" @click="closeProjectEditor"><span aria-hidden="true">×</span> 关闭</button>
+          </header>
+
+          <div class="project-editor-shell">
+            <nav class="project-editor-nav" aria-label="项目编辑分区">
+              <button type="button" class="project-editor-tab" :class="{active:projectEditorTab==='basic'}" @click="projectEditorTab='basic'">
+                <span class="project-editor-step">01</span><span><strong>基本信息</strong><small>名称、编码、状态、别名</small></span><span class="project-editor-count">{{ projectAliasList.length }}</span>
+              </button>
+              <button type="button" class="project-editor-tab" :class="{active:projectEditorTab==='offer'}" @click="projectEditorTab='offer'">
+                <span class="project-editor-step">02</span><span><strong>报价与话术</strong><small>价格、订金、标准回复</small></span><span class="project-editor-count">{{ projectDraft.offer.activityPrice || '—' }}</span>
+              </button>
+              <button type="button" class="project-editor-tab" :class="{active:projectEditorTab==='resources'}" @click="projectEditorTab='resources'">
+                <span class="project-editor-step">03</span><span><strong>素材与门店</strong><small>图片和服务范围</small></span><span class="project-editor-count">{{ projectDraft.imageIds.length + projectDraft.storeIds.length }}</span>
+              </button>
+              <div class="project-editor-summary">
+                <span class="project-editor-summary-label">当前编辑</span>
+                <strong>{{ projectDraft.name || '未命名项目' }}</strong>
+                <p>{{ projectParentName ? '子项目 · 归入 ' + projectParentName : '主项目 · 显示于客户首页' }}</p>
+                <p>{{ projectDraft.offer.activityPrice ? '活动价 ¥' + projectDraft.offer.activityPrice : '报价待填写' }} · {{ projectDraft.imageIds.length }} 张图片 · {{ projectDraft.storeIds.length }} 家门店</p>
+                <span class="project-editor-status" :class="projectDraft.status">{{ projectStatusLabel(projectDraft.status) }}</span>
+              </div>
+            </nav>
+
+            <main class="project-editor-body">
+              <section v-show="projectEditorTab==='basic'" class="project-section" aria-labelledby="project-basic-title">
+                <div class="project-section-head">
+                  <div><h3 id="project-basic-title">基本信息</h3></div>
+                  <span class="project-section-badge">名称为必填项</span>
+                </div>
+                <div class="project-form-card">
+                  <div class="project-form-grid">
+                    <label class="project-field project-col-3 required"><span>项目名称</span><input ref="projectNameInput" type="text" v-model.trim="projectDraft.name" maxlength="100" placeholder="例如：抗衰全脸"></label>
+                    <label class="project-field project-col-2"><span>项目编码</span><input type="text" v-model.trim="projectDraft.code" maxlength="80" placeholder="留空自动生成"><small class="project-field-hint">仅供系统识别，支持字母、数字、点、下划线和短横线</small></label>
+                    <label class="project-field project-col-1"><span>展示排序</span><input type="number" v-model.number="projectDraft.sortOrder" min="0" max="100000" step="1"><small class="project-field-hint">越小越靠前</small></label>
+                    <label class="project-field project-col-3"><span>归属父项目</span><select v-model="projectDraft.parentId" :disabled="projectDraftHasChildren"><option value="">无（作为主项目）</option><option v-for="parent in projectParentOptions" :key="'parent-'+parent.id" :value="String(parent.id)">{{ parent.name }} · {{ resourceScopeLabel(parent) }}</option></select><small class="project-field-hint">{{ projectDraftHasChildren ? '该项目已有子项目，不能再归入其他项目' : '选择后成为一级子项目；只显示同一归属下的主项目' }}</small></label>
+                    <div class="project-hierarchy-note">{{ projectParentName ? '客户提到“' + (projectDraft.name || '当前子项目') + '”时，会使用该子项目自己的报价和素材；首页仍只显示“' + projectParentName + '”。' : '主项目会显示在客户首页，也可以继续添加多个具有独立报价的一级子项目。' }}</div>
+                    <label class="project-field project-col-6"><span>服务范围 / 包含部位</span><textarea v-model="projectDraft.serviceScope" maxlength="2000" rows="4" placeholder="例如：具体包含哪些部位、哪些区域；未确认时请留空"></textarea><small class="project-field-hint">留空表示未发布服务范围</small></label>
+                    <div class="project-field project-col-6"><span>项目状态</span>
+                      <div class="project-status-picker">
+                        <label class="project-status-option" :class="{selected:projectDraft.status==='published'}"><input type="radio" value="published" v-model="projectDraft.status"><span><strong>已发布</strong><small>主项目显示首页；子项目参与识别并使用自己的报价</small></span></label>
+                        <label class="project-status-option" :class="{selected:projectDraft.status==='draft'}"><input type="radio" value="draft" v-model="projectDraft.status"><span><strong>草稿</strong><small>保存内容，但暂不对客户开放</small></span></label>
+                        <label class="project-status-option" :class="{selected:projectDraft.status==='disabled'}"><input type="radio" value="disabled" v-model="projectDraft.status"><span><strong>已停用</strong><small>保留历史数据，不再展示和匹配</small></span></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="project-form-card">
+                  <label class="project-field"><span>项目别名</span></label>
+                  <div class="project-alias-editor"><input type="text" v-model.trim="projectAliasInput" maxlength="100" placeholder="例如：祛斑、改善色斑" aria-label="新增项目别名" @keydown.enter.prevent="addProjectAlias"><button type="button" class="btn btn-plain" @click="addProjectAlias">＋ 添加别名</button></div>
+                  <div class="project-alias-list">
+                    <span v-for="alias in projectAliasList" :key="alias" class="project-alias-chip">{{ alias }}<button type="button" :aria-label="'删除别名 ' + alias" @click="removeProjectAlias(alias)">×</button></span>
+                    <span v-if="!projectAliasList.length" class="project-alias-empty">尚未添加别名，系统仍会识别标准项目名称</span>
+                  </div>
+                </div>
+              </section>
+
+              <section v-show="projectEditorTab==='offer'" class="project-section" aria-labelledby="project-offer-title">
+                <div class="project-section-head">
+                  <div><h3 id="project-offer-title">报价与标准话术</h3></div>
+                  <span class="project-section-badge">无需重新向量化</span>
+                </div>
+                <div class="project-form-card">
+                  <div class="project-form-grid">
+                    <label class="project-field project-col-2"><span>活动价</span><span class="project-money-wrap"><input type="number" step="0.01" min="0" v-model="projectDraft.offer.activityPrice" placeholder="0.00"></span></label>
+                    <label class="project-field project-col-2"><span>原价（选填）</span><span class="project-money-wrap"><input type="number" step="0.01" min="0" v-model="projectDraft.offer.originalPrice" placeholder="0.00"></span></label>
+                    <label class="project-field project-col-1"><span>订金</span><span class="project-money-wrap"><input type="number" step="0.01" min="0" v-model="projectDraft.offer.deposit" placeholder="0.00"></span><small class="project-field-hint">不能高于活动价</small></label>
+                    <label class="project-field project-col-1"><span>报价状态</span><select v-model="projectDraft.offer.status"><option value="published">已发布</option><option value="draft">草稿</option><option value="disabled">已停用</option></select></label>
+                  </div>
+                  <div class="project-price-summary" aria-label="报价摘要">
+                    <div><span>客户活动价</span><strong>{{ projectDraft.offer.activityPrice === '' ? '待填写' : '¥' + projectDraft.offer.activityPrice }}</strong></div>
+                    <div><span>优惠幅度</span><strong>{{ projectDiscount == null ? '—' : projectDiscount + '%' }}</strong></div>
+                    <div><span>到店待付</span><strong>{{ projectBalance == null ? '—' : '¥' + projectBalance }}</strong></div>
+                  </div>
+                </div>
+                <div class="project-form-card">
+                  <div class="project-copy-grid">
+                    <label class="project-field"><span>简短价格回复</span><textarea v-model="projectDraft.offer.briefCopy" maxlength="1000" placeholder="例如：淡斑活动价198元，8元订金可抵扣，到店再付190元。"></textarea><small class="project-field-hint">{{ String(projectDraft.offer.briefCopy || '').length }}/1000 · 留空时系统根据金额自动生成</small></label>
+                    <label class="project-field"><span>首次项目介绍</span><textarea v-model="projectDraft.offer.saleCopy" maxlength="5000" placeholder="填写顾客首次咨询该项目时发送的完整介绍话术，可分段输入。"></textarea><small class="project-field-hint">{{ String(projectDraft.offer.saleCopy || '').length }}/5000</small></label>
+                  </div>
+                </div>
+              </section>
+
+              <section v-show="projectEditorTab==='resources'" class="project-section" aria-labelledby="project-resources-title">
+                <div class="project-section-head">
+                  <div><h3 id="project-resources-title">关联素材与门店</h3></div>
+                  <span class="project-section-badge">已选 {{ projectDraft.imageIds.length }} 图 · {{ projectDraft.storeIds.length }} 店</span>
+                </div>
+                <div class="project-resources-grid">
+                  <div class="project-resource-panel">
+                    <div class="project-resource-head"><div><strong>项目图片</strong><span>已选 {{ projectDraft.imageIds.length }}</span></div><div class="project-resource-actions"><button type="button" @click="selectFilteredProjectImages">全选当前结果</button><button type="button" @click="projectDraft.imageIds=[]">清空</button></div></div>
+                    <div class="project-search-wrap"><input type="search" class="project-search" v-model.trim="projectImageSearch" placeholder="搜索图片名称或类型" aria-label="搜索项目图片"></div>
+                    <div v-if="filteredProjectImages.length" class="project-resource-list">
+                      <label v-for="img in filteredProjectImages" :key="'pa-'+img.id" class="project-resource-option" :class="{selected:projectDraft.imageIds.includes(Number(img.id)),unavailable:img.enabled===false}">
+                        <input type="checkbox" v-model="projectDraft.imageIds" :value="Number(img.id)" :disabled="img.enabled===false && !projectDraft.imageIds.includes(Number(img.id))">
+                        <img v-if="img.url" class="project-resource-thumb" :src="img.url" :alt="img.name"><span v-else class="project-resource-thumb" aria-hidden="true">图</span>
+                        <span class="project-resource-copy"><strong>{{ img.name }}</strong><small>{{ img.enabled === false ? '素材已停用，可取消关联' : '可用于客户对话发送' }}</small></span>
+                        <span class="project-resource-type">{{ img.asset_type === 'promo' ? '海报' : '效果图' }}</span>
+                      </label>
+                    </div>
+                    <div v-else class="project-resource-empty">没有找到匹配的图片素材</div>
+                  </div>
+
+                  <div class="project-resource-panel">
+                    <div class="project-resource-head"><div><strong>支持门店</strong><span>已选 {{ projectDraft.storeIds.length }}</span></div><div class="project-resource-actions"><button type="button" :disabled="!filteredProjectStores.length" @click="selectFilteredProjectStores">全选当前</button><button type="button" :disabled="!filteredSelectedProjectStoreCount" @click="clearFilteredProjectStores">取消当前</button><button type="button" :disabled="!projectDraft.storeIds.length" @click="projectDraft.storeIds=[]">清空全部</button></div></div>
+                    <div class="project-store-filters">
+                      <label class="project-store-filter"><span>城市</span><select v-model="projectStoreCity" aria-label="按城市筛选支持门店" @change="onProjectStoreCityChange"><option value="">全部城市（{{ projectStores.length }}）</option><option v-for="city in projectStoreCities" :key="'store-city-'+city" :value="city">{{ city }}（{{ projectStoreCountByCity(city) }}）</option></select></label>
+                      <label class="project-store-filter"><span>区 / 县</span><select v-model="projectStoreDistrict" aria-label="按区县筛选支持门店" :disabled="!projectStoreCity || !projectStoreDistricts.length"><option value="">{{ !projectStoreCity ? '请先选择城市' : (projectStoreDistricts.length ? '全部区 / 县' : '该城市未设置区县') }}</option><option v-for="district in projectStoreDistricts" :key="'store-district-'+district" :value="district">{{ district }}（{{ projectStoreCountByDistrict(district) }}）</option></select></label>
+                    </div>
+                    <div class="project-store-filter-summary"><span><strong>当前显示 {{ filteredProjectStores.length }} 家</strong><template v-if="projectStoreCity"> · {{ projectStoreCity }}<template v-if="projectStoreDistrict"> / {{ projectStoreDistrict }}</template></template></span><span>其中已选 {{ filteredSelectedProjectStoreCount }} 家</span></div>
+                    <div class="project-search-wrap"><input type="search" class="project-search" v-model.trim="projectStoreSearch" placeholder="在当前地区搜索门店或地址" aria-label="搜索支持门店"></div>
+                    <div v-if="filteredProjectStores.length" class="project-resource-list">
+                      <label v-for="store in filteredProjectStores" :key="'ps-'+store.id" class="project-resource-option store" :class="{selected:projectDraft.storeIds.includes(Number(store.id))}">
+                        <input type="checkbox" v-model="projectDraft.storeIds" :value="Number(store.id)">
+                        <span class="project-resource-region"><strong>{{ store.city || '城市未设' }}</strong><small>{{ store.district || '区县未设' }}</small></span>
+                        <span class="project-resource-copy"><strong>{{ store.name }}</strong><small>{{ store.address || (store.city + ' · 地址待完善') }}</small></span>
+                      </label>
+                    </div>
+                    <div v-else class="project-resource-empty">{{ projectStoreCity ? '当前城市或区县没有匹配门店，请切换地区或清除搜索词' : '没有找到匹配的门店' }}</div>
+                  </div>
+                </div>
+              </section>
+            </main>
+          </div>
+
+          <footer class="project-editor-footer">
+            <div class="project-editor-footer-actions"><button type="button" class="btn btn-plain" :disabled="projectSaving" @click="closeProjectEditor">取消</button><button type="submit" class="btn btn-primary project-save-btn" :disabled="projectSaving || !String(projectDraft.name || '').trim()">{{ projectSaving ? '正在保存…' : '保存并同步全部入口' }}</button></div>
+          </footer>
+        </form>
+      </div>
+    </div>
+
+    <!-- 结构化事实（AI 回答的唯一事实源） -->
+    <div v-show="tab === 'facts'" class="card">
+      <h2>结构化事实（共 {{ facts.length }} 条）</h2>
+      <p class="muted">价格、营业时间、禁忌等权威事实在这里维护。AI 回答时优先引用「已发布」且在有效期内的事实；保存后立即生效，无需重建向量索引。发布状态必须填写内容。</p>
+      <div class="form-row">
+        <input type="search" v-model="factsFilter" aria-label="筛选事实" placeholder="按键名 / 项目 / 内容筛选，如：价格、营业">
+        <span class="muted">命中 {{ filteredFacts.length }} 条</span>
+      </div>
+      <table>
+        <tr><th scope="col">键名</th><th scope="col">项目</th><th scope="col">类型</th><th scope="col">状态</th><th scope="col">内容</th><th scope="col">有效期</th><th scope="col">操作</th></tr>
+        <tr v-if="filteredFacts.length === 0"><td colspan="7" class="empty-row">暂无事实记录</td></tr>
+        <tr v-for="f in filteredFacts" :key="f.fact_key">
+          <td class="mono">{{ f.fact_key }}</td>
+          <td>{{ f.project || '—' }}</td>
+          <td>{{ f.fact_type }}</td>
+          <td><span class="chip" :class="'status-' + f.status">{{ factStatusLabel(f.status) }}</span></td>
+          <td class="fact-cell">{{ f.display_text || '—' }}</td>
+          <td class="muted">{{ factValidity(f) }}</td>
+          <td>
+            <button class="btn btn-primary" @click="openFactEditor(f)">编辑</button>
+          </td>
+        </tr>
+      </table>
+
+      <!-- 事实编辑弹窗 -->
+      <div v-if="factEdit" class="kb-mask" @click.self="factEdit = null">
+        <div class="kb-modal" role="dialog" aria-modal="true" aria-label="事实编辑器">
+          <div class="kb-modal-head">
+            <h2>编辑事实：{{ factEdit.fact_key }}</h2>
+            <button class="btn btn-plain" @click="factEdit = null">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div class="kb-item">
+              <div class="kb-faq-editor">
+                <label class="wide"><span>项目</span><input v-model="factEdit.project" maxlength="100" placeholder="关联项目名，可留空"></label>
+                <label class="wide"><span>事实类型</span><input v-model="factEdit.fact_type" maxlength="50" placeholder="如 price / business_hours / taboo"></label>
+                <label class="wide"><span>状态</span>
+                  <select v-model="factEdit.status">
+                    <option value="draft">草稿（不参与回答）</option>
+                    <option value="published">已发布（AI 引用）</option>
+                    <option value="disabled">已停用</option>
+                  </select>
+                </label>
+                <label class="wide"><span>对客户展示的内容（发布状态必填）</span><textarea v-model="factEdit.display_text" rows="4" maxlength="2000" placeholder="填写权威、准确的事实表述"></textarea></label>
+                <label class="wide"><span>来源说明</span><input v-model="factEdit.source" maxlength="200" placeholder="该事实的依据，如：已确认的活动价政策"></label>
+                <label class="wide"><span>审核人</span><input v-model="factEdit.reviewer" maxlength="50" placeholder="填写审核人姓名/账号"></label>
+                <label class="wide"><span>生效时间（可留空=立即长期生效）</span><input type="datetime-local" v-model="factEdit.valid_from"></label>
+                <label class="wide"><span>失效时间（可留空=长期有效）</span><input type="datetime-local" v-model="factEdit.valid_until"></label>
+              </div>
+            </div>
+          </div>
+          <div class="kb-modal-head" style="border-top:1px solid var(--line);border-bottom:none;padding:12px 16px;">
+            <span></span>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-plain" @click="factEdit = null">取消</button>
+              <button class="btn btn-primary" :disabled="factSaving" @click="saveFact">{{ factSaving ? '保存中…' : '保存' }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图片素材 -->
+    <div v-show="tab === 'img'" class="card">
+      <h2>图片素材（共 {{ images.length }} 张）</h2>
+      <div class="resource-scope-bar">
+        <label><span>新资源所属企业</span><select v-model="resourceScope.tenantId" @change="onResourceTenantChange"><option value="">全局共享</option><option v-for="tenant in resourceScopeCatalog.tenants" :key="'img-t-'+tenant.id" :value="String(tenant.id)">{{ tenant.name }}</option></select></label>
+        <label><span>所属微信客服号</span><select v-model="resourceScope.kfAccountId" :disabled="!resourceScope.tenantId"><option value="">企业内全部客服号共享</option><option v-for="account in resourceAccounts" :key="'img-k-'+account.id" :value="String(account.id)">{{ account.name }}</option></select></label>
+        <div class="resource-scope-summary"><strong>当前归属：{{ selectedResourceScopeLabel }}</strong><br>下面新上传的效果图和海报只会在对应企业/客服号的对话中匹配。</div>
+      </div>
+      <div class="form-row">
+        <input type="file" ref="imgFile" accept="image/*" aria-label="选择图片素材">
+        <input type="text" v-model="imgName" aria-label="图片名称" placeholder="图片名，如：眼袋前后对比">
+        <input type="text" v-model="imgTags" aria-label="图片标签" placeholder="标签（空格分隔），如：眼袋 对比图 案例">
+      </div>
+      <div class="form-row img-meta-row">
+        <select v-model="imgProject" aria-label="所属项目">
+          <option value="">选择所属项目</option>
+          <option v-for="project in publishedProjectOptions" :key="'img-project-'+project" :value="project">{{ project }}</option>
+        </select>
+        <select v-model="imgType" aria-label="图片类型">
+          <option value="effect">效果图</option><option value="promo">优惠海报</option>
+        </select>
+        <label class="switch-field" title="关闭后该图片不会在对话中发给客户">
+          <span class="switch"><input type="checkbox" v-model="imgEnabled" aria-label="启用"><span class="slider"></span></span>
+          <span class="switch-text">启用<span class="muted">（上传后客户可在对话中收到）</span></span>
+        </label>
+        <button class="btn btn-primary upload-btn" :disabled="uploadingImg" @click="uploadImg">{{ uploadingImg ? '上传中…' : '上传图片' }}</button>
+      </div>
+      <div v-if="imgType === 'promo'" class="form-row">
+        <label>生效时间 <input type="datetime-local" v-model="imgValidFrom" aria-label="海报生效时间"></label>
+        <label>失效时间 <input type="datetime-local" v-model="imgValidUntil" aria-label="海报失效时间"></label>
+        <span class="muted img-promo-note">不填表示立即生效或长期有效；过期后不会自动发送</span>
+      </div>
+      <div class="form-row">
+        <select v-model="imgTagFilter" aria-label="按图片标签筛选" style="padding:8px;border:1px solid var(--line);border-radius:6px">
+          <option value="">全部标签</option>
+          <option v-for="t in imgTagsAll" :key="t" :value="t">{{ t }}</option>
+        </select>
+        <span class="muted">点击缩略图可放大预览</span>
+      </div>
+      <!-- 图片编辑浮层：点"编辑"即居中弹出，不用在列表底部展开内联表单 -->
+      <div v-if="imgEditId" class="kb-mask" @click.self="cancelImgEdit">
+        <div class="kb-modal" role="dialog" aria-modal="true" aria-label="图片素材编辑">
+          <div class="kb-modal-head">
+            <h2>编辑图片素材</h2>
+            <button class="btn btn-plain" @click="cancelImgEdit">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div v-if="imgEditPreview" class="img-edit-preview">
+              <img :src="imgEditPreview" alt="图片预览" class="img-thumb-lg">
+            </div>
+            <div class="form-row">
+              <input type="text" v-model="imgEditName" aria-label="编辑图片名称" placeholder="图片名">
+              <input type="text" v-model="imgEditTags" aria-label="编辑图片标签" placeholder="标签（空格分隔）">
+              <select v-model="imgEditProject" aria-label="编辑所属项目">
+                <option value="">选择所属项目</option>
+                <option v-for="project in publishedProjectOptions" :key="'img-edit-project-'+project" :value="project">{{ project }}</option>
+              </select>
+              <select v-model="imgEditType" aria-label="编辑图片类型">
+                <option value="effect">效果图</option><option value="promo">优惠海报</option>
+              </select>
+              <label class="switch-field" title="关闭后该图片不会在对话中发给客户">
+                <span class="switch"><input type="checkbox" v-model="imgEditEnabled" aria-label="启用"><span class="slider"></span></span>
+                <span class="switch-text">启用<span class="muted">（在对话中可发送给客户）</span></span>
+              </label>
+            </div>
+            <div v-if="imgEditType === 'promo'" class="form-row">
+              <label>生效时间 <input type="datetime-local" v-model="imgEditValidFrom"></label>
+              <label>失效时间 <input type="datetime-local" v-model="imgEditValidUntil"></label>
+            </div>
+            <div class="form-row">
+              <button class="btn btn-primary" @click="saveImgEdit">保存</button>
+              <button class="btn btn-plain" @click="cancelImgEdit">取消</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <table>
+        <tr><th scope="col">预览</th><th scope="col">名称</th><th scope="col">归属</th><th scope="col">项目</th><th scope="col">类型</th><th scope="col">状态/有效期</th><th scope="col">标签</th><th scope="col">操作</th></tr>
+        <tr v-if="filteredImages.length === 0"><td colspan="8" class="empty-row">暂无记录</td></tr>
+        <tr v-for="img in pagedImages" :key="img.id">
+          <td><img class="thumb img-thumb" :src="img.url" :alt="img.name" role="button" tabindex="0" @click="imgPreview = img.url" @keydown.enter="imgPreview = img.url" @keydown.space.prevent="imgPreview = img.url"></td>
+          <td class="ellipsis" :title="img.name">{{ img.name }}</td>
+          <td><span class="chip">{{ resourceScopeLabel(img) }}</span></td>
+          <td>{{ img.projects || img.project || '未设置' }}</td>
+          <td>{{ img.asset_type === 'promo' ? '优惠海报' : '效果图' }}</td>
+          <td class="muted">
+            <span class="ai-status" :class="img.enabled === false ? 'failed' : 'matched'">{{ img.enabled === false ? '已停用' : '已启用' }}</span>
+            <template v-if="img.asset_type === 'promo'"><br>{{ imageValidityText(img) }}</template>
+          </td>
+          <td class="ellipsis" :title="img.tags">{{ img.tags }}</td>
+          <td>
+            <button class="btn btn-plain" @click="startImgEdit(img)">编辑</button>
+            <button class="btn btn-danger" @click="deleteImg(img.id)">删除</button>
+          </td>
+        </tr>
+      </table>
+      <div v-if="totalImgPages > 1" class="pager">
+        <button class="btn btn-plain" :disabled="imgPage <= 1" @click="imgPage--">上一页</button>
+        <span class="muted">第 {{ imgPage }} / {{ totalImgPages }} 页 · 共 {{ filteredImages.length }} 张</span>
+        <button class="btn btn-plain" :disabled="imgPage >= totalImgPages" @click="imgPage++">下一页</button>
+        <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.img" min="1" :max="totalImgPages" @keyup.enter="gotoPage('img','imgPage','totalImgPages')"> 页<button class="btn btn-plain" @click="gotoPage('img','imgPage','totalImgPages')">前往</button></span>
+      </div>
+    </div>
+
+    <!-- 门店 -->
+    <div v-show="tab === 'store'" class="card">
+      <h2>门店管理（共 {{ stores.length }} 家）</h2>
+      <div class="resource-scope-bar">
+        <label><span>新门店所属企业</span><select v-model="resourceScope.tenantId" @change="onResourceTenantChange"><option value="">全局共享</option><option v-for="tenant in resourceScopeCatalog.tenants" :key="'store-t-'+tenant.id" :value="String(tenant.id)">{{ tenant.name }}</option></select></label>
+        <label><span>所属微信客服号</span><select v-model="resourceScope.kfAccountId" :disabled="!resourceScope.tenantId"><option value="">企业内全部客服号共享</option><option v-for="account in resourceAccounts" :key="'store-k-'+account.id" :value="String(account.id)">{{ account.name }}</option></select></label>
+        <div class="resource-scope-summary"><strong>当前归属：{{ selectedResourceScopeLabel }}</strong><br>点击“新增门店”后保存的门店会使用该归属；编辑已有门店不会改变归属。</div>
+      </div>
+      <div class="form-row">
+        <input type="text" v-model="storeFilter" aria-label="按城市筛选门店" placeholder="按城市/区县过滤，如：昆明" @input="debouncedLoadStores">
+        <input type="text" v-model="storeAddress" aria-label="按详细地址模糊搜索" placeholder="按详细地址模糊搜索，如：爱琴海" @input="debouncedLoadStores">
+        <button class="btn btn-plain" @click="editStore = blankStore(); storeDialog = true">＋ 新增门店</button>
+      </div>
+      <!-- 门店编辑浮层：点"编辑"即居中弹出，不用滚动回页面顶部 -->
+      <div v-if="storeDialog" class="kb-mask" @click.self="storeDialog = false">
+        <div class="kb-modal" role="dialog" aria-modal="true" aria-label="门店编辑">
+          <div class="kb-modal-head">
+            <h2>{{ editStore.id ? '编辑门店' : '新增门店' }}</h2>
+            <button class="btn btn-plain" @click="storeDialog = false">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div class="form-row">
+              <input type="text" v-model="editStore.city" aria-label="门店城市" placeholder="城市*">
+              <input type="text" v-model="editStore.district" aria-label="门店区县" placeholder="区县">
+              <input type="text" v-model="editStore.name" aria-label="门店名称" placeholder="门店名*">
+            </div>
+            <div class="form-row">
+              <input type="text" v-model="editStore.address" aria-label="门店详细地址" placeholder="详细地址*">
+              <button class="btn btn-plain" :disabled="geocoding" @click="autoLocate">🔍 {{ geocoding ? '解析中…' : '自动定位' }}</button>
+            </div>
+            <div class="form-row" style="flex-direction:column;align-items:flex-start;gap:0;">
+              <span style="margin-bottom:8px;color:var(--muted);font-size:13px;">可做项目（勾选主项目后，其下子项目自动包含）</span>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;width:100%;">
+                <button type="button" class="chip chip-toggle"
+                        v-for="project in rootProjectOptions" :key="'store-project-'+project"
+                        :class="{active: storeProjectValues.includes(project)}"
+                        @click="toggleStoreProject(project)">{{ project }}</button>
+              </div>
+            </div>
+            <div class="form-row">
+              <input type="text" v-model="editStore.lat" aria-label="门店纬度" placeholder="纬度（自动定位/选点后填充）">
+              <input type="text" v-model="editStore.lng" aria-label="门店经度" placeholder="经度（自动定位/选点后填充）">
+              <button class="btn btn-plain" @click="openMapPicker">🗺 地图选点</button>
+            </div>
+            <div class="form-row">
+              <button class="btn btn-primary" @click="saveStore">保存</button>
+              <button class="btn btn-plain" @click="storeDialog = false">取消</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 地图选点（P1-4）：所见即所得校验/修正门店坐标，避免"附近门店"静默失准 -->
+      <div v-if="mapDialog" class="kb-mask" style="z-index:80" @click.self="closeMapPicker">
+        <div class="kb-modal" role="dialog" aria-modal="true" aria-label="地图选点" style="width:min(760px,95vw)">
+          <div class="kb-modal-head">
+            <h2>地图选点：{{ editStore.name || '门店' }}</h2>
+            <button class="btn btn-plain" @click="closeMapPicker">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div class="form-row">
+              <input type="text" v-model="mapSearch" aria-label="地址定位" placeholder="输入地址定位到地图，如：云南省昆明市五华区XX路" @keyup.enter="mapSearchPlace">
+              <button class="btn btn-primary" :disabled="mapSearching" @click="mapSearchPlace">{{ mapSearching ? '定位中…' : '搜索定位' }}</button>
+              <span class="muted">或直接在地图上点击门店位置</span>
+            </div>
+            <div ref="pickerMap" style="width:100%;height:420px;border-radius:10px;overflow:hidden;border:1px solid var(--line)"></div>
+            <div class="form-row" style="margin-top:10px">
+              <span class="muted">已选坐标：<b>{{ mapPicked.lat || '（未选）' }}</b><template v-if="mapPicked.lng">, {{ mapPicked.lng }}</template></span>
+              <span style="flex:1"></span>
+              <button class="btn btn-primary" @click="applyMapPoint">使用该坐标</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <table>
+        <tr><th scope="col">城市</th><th scope="col">区县</th><th scope="col">门店名</th><th scope="col">归属</th><th scope="col">地址</th><th scope="col">项目</th><th scope="col">操作</th></tr>
+        <tr v-if="stores.length === 0"><td colspan="7" class="empty-row">暂无记录 · 点上方「＋ 新增门店」录入第一家门店（地址自动解析地图坐标）</td></tr>
+        <tr v-for="s in pagedStores" :key="s.id">
+          <td>{{ s.city }}</td><td>{{ s.district }}</td><td>{{ s.name }}</td><td><span class="chip">{{ resourceScopeLabel(s) }}</span></td>
+          <td class="ellipsis-wide" :title="s.address">{{ s.address }}</td>
+          <td class="ellipsis-wide" :title="s.projects">{{ s.projects }}</td>
+          <td>
+            <button class="btn btn-plain" @click="editStore = {...s}; storeDialog = true">编辑</button>
+            <button class="btn btn-danger" @click="deleteStore(s.id)">删除</button>
+          </td>
+        </tr>
+      </table>
+      <div v-if="totalStorePages > 1" class="pager">
+        <button class="btn btn-plain" :disabled="storePage <= 1" @click="storePage--">上一页</button>
+        <span class="muted">第 {{ storePage }} / {{ totalStorePages }} 页 · 共 {{ stores.length }} 家</span>
+        <button class="btn btn-plain" :disabled="storePage >= totalStorePages" @click="storePage++">下一页</button>
+        <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.store" min="1" :max="totalStorePages" @keyup.enter="gotoPage('store','storePage','totalStorePages')"> 页<button class="btn btn-plain" @click="gotoPage('store','storePage','totalStorePages')">前往</button></span>
+      </div>
+    </div>
+
+    <!-- AI 运营概览 -->
+    <div v-show="tab === 'report'">
+      <div class="card" v-if="report">
+        <div class="form-row report-range-bar">
+          <h2 class="report-compact-title">AI 运营概览</h2>
+          <div class="range-picker">
+            <button type="button" class="range-trigger" :aria-expanded="pickerOpen" @click="toggleReportPicker">
+              <span aria-hidden="true">📅</span> {{ reportRangeText }} <span class="range-caret">▾</span>
+            </button>
+            <div v-if="pickerOpen" class="range-panel">
+              <div class="range-quick">
+                <button v-for="q in quickRangeOptions" :key="q.kind" type="button" class="range-quick-item"
+                        @click="applyQuickRange(q)">{{ q.label }}</button>
+              </div>
+              <div class="range-calendars">
+                <div class="range-nav">
+                  <button type="button" class="range-nav-btn" @click="pickerShiftMonth(-12)" aria-label="上一年">«</button>
+                  <button type="button" class="range-nav-btn" @click="pickerShiftMonth(-1)" aria-label="上一月">‹</button>
+                  <span class="range-nav-labels">
+                    <b>{{ pickerMonths[0].label }}</b>
+                    <b>{{ pickerMonths[1].label }}</b>
+                  </span>
+                  <button type="button" class="range-nav-btn" @click="pickerShiftMonth(1)" aria-label="下一月">›</button>
+                  <button type="button" class="range-nav-btn" @click="pickerShiftMonth(12)" aria-label="下一年">»</button>
+                </div>
+                <div class="range-cal-wrap">
+                  <div v-for="cal in pickerMonths" :key="cal.label" class="range-cal">
+                    <div class="range-week"><span v-for="w in ['日','一','二','三','四','五','六']" :key="w">{{ w }}</span></div>
+                    <div class="range-grid">
+                      <span v-for="n in cal.blanks" :key="'b' + n" class="range-cell empty"></span>
+                      <button v-for="d in cal.days" :key="d.date" type="button" class="range-cell"
+                              :class="pickerCellClass(d)" @click="pickDate(d)"
+                              @mouseenter="pickerHover = d.date">{{ d.day }}</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <span style="flex:1"></span>
+          <span class="rt-pill" v-if="reportRealtime" title="当前排队情况，不受日期筛选影响">⏳ 等待接入 <b>{{ reportRealtime.queueWaiting }}</b></span>
+          <span class="rt-pill" :class="{ 'queue-warning': reportRealtime && reportRealtime.queueOverdue > 0 }" v-if="reportRealtime" title="当前排队超过 10 分钟的会话">⚠ 排队超时 <b>{{ reportRealtime.queueOverdue }}</b></span>
+          <button class="btn btn-plain" :disabled="reportExporting" @click="exportReport('excel')">⬇ 导出 Excel（含 4 个工作表）</button>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card" title="所选期间实际收到客户消息的会话数，按会话去重，包含继续咨询的旧会话。">
+            <div class="kpi-icon cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+            <div class="kpi-body">
+              <div class="kpi-label">有效咨询会话数</div>
+              <div class="kpi-value">{{ formatCount(report.conversations) }}</div>
+              <div class="kpi-note">用户消息 {{ formatCount(report.userMessages) }} 条</div>
+            </div>
+          </div>
+          <div class="kpi-card" title="期间有效留资客户数 ÷ 期间可识别咨询客户数。手机号格式正确、意向项目非空且登记未取消；按企业、客服号和渠道隔离去重，不代表预约成功。">
+            <div class="kpi-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m8 9 3 3 5-5"/></svg></div>
+            <div class="kpi-body">
+              <div class="kpi-label">有效留资率</div>
+              <div class="kpi-value" :class="{'is-empty': report.leadRate == null}">{{ reportRate(report.leadRate) }}</div>
+              <div class="kpi-note">{{ report.leadCustomers }} / {{ report.consultingCustomers }} 位客户</div>
+            </div>
+          </div>
+          <div class="kpi-card" title="记录期内进入人工处理流程的咨询会话数 ÷ 记录期内有效咨询会话数，含等待接入。越低不一定越好，也不能据此推算问题解决率。">
+            <div class="kpi-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg></div>
+            <div class="kpi-body">
+              <div class="kpi-label">转人工率</div>
+              <div class="kpi-value" :class="{'is-empty': report.handoffRate == null}">{{ reportRate(report.handoffRate) }}</div>
+              <div class="kpi-note">{{ report.handoffs }} / {{ report.handoffObservedConversations }} 个会话<span v-if="report.handoffPartial"><br>仅含有记录期间</span></div>
+            </div>
+          </div>
+          <div class="kpi-card" title="知识不足回复数 ÷ 已分类的业务范围内回复数。超出业务范围、安全响应和业务信息待核实分别统计；历史未分类回复不计入分母。">
+            <div class="kpi-icon rose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3m0 3h.01"/></svg></div>
+            <div class="kpi-body">
+              <div class="kpi-label">知识不足率</div>
+              <div class="kpi-value" :class="{'is-empty': report.knowledgeGapRate == null}">{{ reportRate(report.knowledgeGapRate) }}</div>
+              <div class="kpi-note">{{ report.knowledgeGapReplies }} / {{ report.knowledgeEligibleReplies }} 条业务回复</div>
+            </div>
+          </div>
+          <div class="kpi-card" title="服务端收到客户消息至首次成功发送有效回复的耗时。展示中位数和 P95；不含欢迎语、排队提示、发送失败及客户网络传输耗时。">
+            <div class="kpi-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="kpi-body">
+              <div class="kpi-label">AI 首响（中位数）</div>
+              <div class="kpi-value" :class="{'is-empty': report.firstResponseMedianMs == null}">{{ reportDuration(report.firstResponseMedianMs) }}</div>
+              <div class="kpi-note">P95 {{ reportDuration(report.firstResponseP95Ms) }}<br>{{ report.responseSamples }} 次采样</div>
+            </div>
+          </div>
+        </div>
+        <details class="report-metric-details">
+          <summary>统计口径与原因明细<span v-if="report.unclassifiedReplies"> · {{ report.unclassifiedReplies }} 条回复尚无原因记录</span></summary>
+          <p>有效咨询按所选期间收到客户消息的会话去重。留资按可识别客户去重，要求同期间登记、手机号格式正确、意向项目非空且未取消；不代表预约成功。</p>
+          <p>转人工含等待接入，按事件记录统计，不随会话关闭而消失。<span v-if="report.handoffPartial">所选期间包含未采集历史，本项仅统计 {{ report.handoffTrackedFrom }} 起的咨询与转接记录。</span>未转人工不代表问题已解决。</p>
+          <div class="report-reason-list" v-if="report.handoffReasons && report.handoffReasons.length">
+            <span v-for="r in report.handoffReasons" :key="r.reason">{{ reportHandoffReason(r.reason) }} <b>{{ r.count }} 次转接</b></span>
+          </div>
+          <p>知识不足率仅使用已分类的业务回复。范围外问题、安全响应、业务信息待核实和服务异常分别观察，历史未分类回复不作为成功回答。</p>
+          <div class="report-reason-list">
+            <span>知识不足 <b>{{ report.knowledgeGapReplies }} 条</b></span>
+            <span>超出业务范围 <b>{{ report.outOfScopeReplies }} 条</b></span>
+            <span>业务信息待核实 <b>{{ report.businessUnavailableReplies }} 条</b></span>
+            <span>安全响应 <b>{{ report.safetyReplies }} 条</b></span>
+            <span>服务异常 <b>{{ report.errorReplies }} 条</b></span>
+            <span>未分类 <b>{{ report.unclassifiedReplies }} 条</b></span>
+          </div>
+          <p>首响从服务端接收至首次成功发送有效回复，仅统计已采集的成功样本；P95 表示 95% 的样本在该时间内开始回复。没有样本时显示“暂无数据”。</p>
+        </details>
+      </div>
+
+      <div class="report-mid">
+      <div class="report-mid-main">
+      <div class="card trend-card">
+        <div class="trend-head">
+          <div class="trend-title">
+            <h2>消息量趋势（{{ trendRangeLabel }}）</h2>
+          </div>
+          <div v-if="daily.length" class="trend-summary" :aria-label="trendRangeLabel + '趋势摘要'">
+            <div class="trend-stat"><span>{{ daily.length }} 天总消息</span><strong>{{ formatCount(trendTotal) }}<small>条</small></strong></div>
+            <div class="trend-stat"><span>日均消息</span><strong>{{ trendAverage }}<small>条</small></strong></div>
+            <div class="trend-stat"><span>单日峰值</span><strong>{{ formatCount(trendPeak.value) }}<small>{{ formatTrendDay(trendPeak.day) }}</small></strong></div>
+            <div v-if="daily.length >= 14" class="trend-stat change" :class="trendPeriodChange.tone"><span>末 7 天较前 7 天</span><strong>{{ trendPeriodChange.text }}</strong></div>
+          </div>
+        </div>
+        <div v-if="daily.length" class="trend-chart-frame" :class="{ 'trend-loading': trendLoading }">
+          <div class="trend-legend">
+            <div class="trend-legend-main"><span class="trend-legend-dot"></span><span>用户消息</span></div>
+          </div>
+          <div class="trend-chart-scroll">
+            <div class="trend-wrap">
+              <svg viewBox="0 0 700 205" role="img" :aria-label="`${trendRangeLabel}用户消息趋势，总计${trendTotal}条，最高${trendPeak.value}条`" @mousemove="onTrendMove" @mouseleave="onTrendLeave">
+                <defs>
+                  <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" :stop-color="trendGradColor" stop-opacity="0.30"/>
+                    <stop offset="100%" :stop-color="trendGradColor" stop-opacity="0.015"/>
+                  </linearGradient>
+                  <filter id="trend-shadow" x="-30%" y="-30%" width="160%" height="180%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.12"/>
+                  </filter>
+                </defs>
+                <text x="58" y="20" font-size="8.5" fill="var(--ink-3)">消息数（条）</text>
+                <g v-for="g in trendGrid" :key="g.value">
+                  <line x1="58" :y1="g.y" x2="642" :y2="g.y" stroke="var(--line)" stroke-width="1" :stroke-dasharray="g.value === 0 ? null : '3 5'" :opacity="g.value === 0 ? 1 : .72"/>
+                  <text x="49" :y="g.y + 3" text-anchor="end" font-size="8.5" fill="var(--ink-2)" font-variant-numeric="tabular-nums">{{ g.label }}</text>
+                </g>
+                <path :d="trendAreaPath" fill="url(#trend-fill)" pointer-events="none"/>
+                <path :d="trendPath" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" pointer-events="none"/>
+                <circle v-if="trendPeak" :cx="trendX(trendPeak.idx)" :cy="trendY(trendPeak.value)" r="7" fill="var(--brand-soft)" stroke="var(--brand-line)" stroke-width="1.25" pointer-events="none"/>
+                <g v-for="(d, i) in daily" :key="d.day">
+                  <circle class="trend-hit" :cx="trendX(i)" :cy="trendY(d.user_messages)" r="14" fill="transparent" style="cursor:pointer"
+                          tabindex="0" role="button" :aria-label="trendPointLabel(i)"
+                          @mouseenter="showTrendPoint(i)" @focus="showTrendPoint(i)" @click="showTrendPoint(i)"
+                          @keydown.enter.prevent="showTrendPoint(i)" @keydown.space.prevent="showTrendPoint(i)"/>
+                  <circle class="trend-point" :cx="trendX(i)" :cy="trendY(d.user_messages)"
+                          :r="trendHover && trendHover.i === i ? 4 : 2.75"
+                          :fill="trendHover && trendHover.i === i ? 'var(--brand-hover)' : 'var(--brand)'"
+                          :stroke="trendPeak.idx === i ? 'var(--brand-hover)' : 'var(--surface)'" stroke-width="1.5" pointer-events="none"/>
+                </g>
+                <text v-for="tick in trendDateTicks" :key="tick.i" :x="trendX(tick.i)" y="194" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">{{ tick.label }}</text>
+                <line v-if="trendHover" :x1="trendHover.x" y1="30" :x2="trendHover.x" y2="164" stroke="var(--brand)" stroke-width="1" stroke-dasharray="3 4" opacity=".72" pointer-events="none"/>
+                <g v-if="trendHover" :transform="`translate(${trendHover.tipX}, ${trendHover.tipY})`" filter="url(#trend-shadow)" pointer-events="none">
+                  <rect x="-62" y="-54" width="124" height="48" rx="9" fill="var(--surface)" stroke="var(--line)" stroke-width="1"/>
+                  <path d="M -53 -54 H 53 Q 62 -54 62 -45 H -62 Q -62 -54 -53 -54 Z" fill="var(--brand)"/>
+                  <text x="0" y="-35" text-anchor="middle" font-size="9.5" fill="var(--ink-2)">{{ trendHover.day }}</text>
+                  <text x="0" y="-17" text-anchor="middle" font-size="13" fill="var(--ink)" font-weight="700" font-variant-numeric="tabular-nums">{{ formatCount(trendHover.value) }}
+                    <tspan v-if="trendHover.deltaLabel" :fill="trendHover.deltaTone === 'up' ? 'var(--trust)' : trendHover.deltaTone === 'down' ? 'rgb(220,20,60)' : 'var(--ink-2)'" font-size="9.5" font-weight="600"> {{ trendHover.deltaLabel }}</tspan>
+                  </text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="trend-mobile-hint">← 横向滑动查看完整 14 天 →</div>
+        </div>
+        <div v-else class="trend-empty">暂无消息数据，产生会话后将在这里显示趋势</div>
+      </div>
+      </div>
+
+      <div class="report-mid-side">
+        <div class="card">
+          <h2>应答方式构成</h2>
+          <div class="comp-wrap">
+            <svg viewBox="0 0 150 150" class="comp-donut" role="img" aria-label="应答方式构成环图">
+              <circle cx="75" cy="75" r="50" fill="none" stroke="var(--bg)" stroke-width="26"></circle>
+              <circle v-for="seg in compSegments" :key="seg.type" cx="75" cy="75" r="50" fill="none"
+                      :stroke="seg.color" stroke-width="26"
+                      :stroke-dasharray="seg.dash"
+                      :transform="'rotate(' + seg.rotate + ' 75 75)'"
+                      :class="{ 'comp-dim': hoveredComp && hoveredComp !== seg.type }">
+                <title>{{ typeName(seg.type) }}</title>
+              </circle>
+              <!-- 中心遮罩圆：盖住圆环内侧可能与数字重叠的部分，保证消息数始终清晰 -->
+              <circle cx="75" cy="75" r="34" fill="var(--surface)"></circle>
+              <text x="75" :y="compNumY" text-anchor="middle" :font-size="compNumFont" font-weight="700" fill="var(--ink)" font-variant-numeric="tabular-nums">{{ compTotal }}</text>
+              <text x="75" y="86" text-anchor="middle" font-size="11" fill="var(--ink-2)">条消息</text>
+            </svg>
+            <div class="comp-legend">
+              <div v-for="c in report.composition" :key="c.type" class="comp-legend-item"
+                   @mouseenter="hoveredComp = c.type" @mouseleave="hoveredComp = null">
+                <span class="comp-dot" :style="{background: segColor(c.type)}"></span>
+                <span class="comp-name">{{ typeName(c.type) }}</span>
+                <span class="comp-count">{{ c.count }} 条</span>
+                <span class="comp-pct">{{ compPct(c.count) }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <div class="card">
+        <h2>热点问题 Top10<span v-if="report">（{{ report.from }} ~ {{ report.to }}）</span></h2>
+        <div class="hot-pills">
+          <span v-for="q in hotQuestions" :key="q.content" class="hot-pill" :title="q.content">
+            <b>{{ q.count }}</b>{{ q.content }}
+          </span>
+          <span v-if="hotQuestions.length === 0" class="muted">暂无记录</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 调优中心与 AI 策略配置共用已拆分的工作区，导航职责保持单一。 -->
+    <div v-show="tab === 'aidev' || tab === 'aiconfig'" class="ai-lab">
+      <section class="ai-lab-hero">
+        <div>
+          <h2>{{ tab === 'aiconfig' ? 'AI 策略配置' : 'AI 调优中心' }}</h2>
+        </div>
+        <div v-if="tab === 'aidev'" class="ai-safe-badges" aria-label="调试安全说明">
+          <span class="ai-safe-badge">✓ 不写会话</span>
+          <span class="ai-safe-badge">✓ 不创建预约</span>
+          <span class="ai-safe-badge">✓ 不分配坐席</span>
+        </div>
+      </section>
+
+      <nav v-if="tab === 'aidev'" class="ai-lab-nav" aria-label="AI 调试功能">
+        <button type="button" :class="{active:debugSection==='playground'}" @click="debugSection='playground'">对话工作台</button>
+        <button type="button" :class="{active:debugSection==='suite'}" @click="debugSection='suite'">回归用例 <span v-if="debugSuiteStats.total">{{ debugSuiteStats.passed }}/{{ debugSuiteStats.total }}</span></button>
+      </nav>
+
+      <template v-if="tab === 'aidev' && debugSection === 'playground'">
+        <div v-if="debugResult" class="ai-kpis" aria-label="本次调试摘要">
+          <div class="ai-kpi"><span>最终路由</span><strong>{{ debugTypeName(debugResult.replyType) }}</strong></div>
+          <div class="ai-kpi"><span>候选 / 采用</span><strong>{{ debugResult.hits.length }} / {{ debugResult.acceptedCount }}</strong></div>
+          <div class="ai-kpi"><span>Prompt 估算</span><strong>{{ debugResult.estimatedPromptTokens || 0 }} tokens</strong></div>
+          <div class="ai-kpi"><span>本次耗时</span><strong>{{ debugResult.durationMs }} ms</strong></div>
+          <div class="ai-kpi"><span>生成模型</span><strong>{{ debugResult.modelInvoked ? '已调用' : (debugResult.replyType === 'AI' ? '未调用' : '无需调用') }}</strong></div>
+        </div>
+
+        <div class="ai-workbench">
+          <section class="ai-panel">
+            <header class="ai-panel-head"><div><h3>场景与上下文</h3></div></header>
+            <div class="ai-panel-body">
+              <div class="ai-field">
+                <label for="debug-preset">快速场景</label>
+                <select id="debug-preset" v-model="debugPreset" @change="applyDebugPreset">
+                  <option value="">自定义问题</option>
+                  <option v-for="p in debugPresets" :key="p.key" :value="p.key">{{ p.name }}</option>
+                </select>
+              </div>
+              <div class="ai-field">
+                <label for="debug-profile"><span style="color:var(--ink)">模拟客户画像</span><span class="muted">{{ debugProfile.length }} 字</span></label>
+                <textarea id="debug-profile" v-model="debugProfile" placeholder="例：55岁，成都，关注眼袋，担心恢复期"></textarea>
+              </div>
+              <details class="ai-advanced">
+                <summary>高级场景：位置与原始历史</summary>
+                <div class="ai-advanced-body">
+                  <div class="ai-field-grid">
+                    <div class="ai-field"><label for="debug-lat">纬度</label><input id="debug-lat" type="number" step="any" v-model="debugLat" placeholder="30.67"></div>
+                    <div class="ai-field"><label for="debug-lng">经度</label><input id="debug-lng" type="number" step="any" v-model="debugLng" placeholder="104.06"></div>
+                  </div>
+                  <div class="ai-field"><label for="debug-history-override">额外历史文本</label><textarea id="debug-history-override" v-model="debugHistoryOverride" placeholder="可粘贴：用户：…… / 助手：……"></textarea></div>
+                </div>
+              </details>
+              <div class="ai-toggle-row">
+                <div><strong>调用真实生成模型</strong><br><span class="muted">关闭时只跑路由、检索和 Prompt</span></div>
+                <button type="button" class="ai-toggle" :class="{on:debugRunModel}" :aria-pressed="debugRunModel" aria-label="切换真实模型调用" @click="debugRunModel=!debugRunModel"></button>
+              </div>
+              <div class="ai-actions">
+                <button type="button" class="btn btn-plain" @click="runCompare" :disabled="debugComparing">{{ debugComparing ? '对比中…' : '对比线上 / 草稿' }}</button>
+                <button type="button" class="btn btn-plain" @click="clearDebugConversation">清空上下文</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="ai-panel ai-chat">
+            <header class="ai-panel-head"><div><h3>对话模拟器</h3></div><span v-if="debugging" class="chip chip-warn">运行中</span></header>
+            <div class="ai-chat-stream">
+              <div v-if="debugMessages.length === 0" class="ai-chat-empty">
+                <div><strong>从一条客户消息开始</strong><br>先做路由预览，需要时再打开真实模型。</div>
+              </div>
+              <div v-for="(m,i) in debugMessages" :key="i" class="ai-message" :class="m.role">
+                <div class="ai-message-bubble">{{ m.content }}<div class="ai-message-meta">{{ m.role === 'user' ? '客户' : 'AI' }}<span v-if="m.type"> · {{ debugTypeName(m.type) }}</span></div></div>
+              </div>
+            </div>
+            <div v-if="debugResult" class="ai-current-result">
+              <strong>{{ debugResult.routeSummary }}</strong>
+              <p v-if="debugResult.answer">{{ debugResult.answer }}</p>
+              <p v-else-if="debugResult.modelError" style="color:var(--danger)">{{ debugResult.modelError }}</p>
+              <p v-else-if="debugResult.replyType === 'AI'">Prompt 已生成；打开“真实生成模型”后可检查最终回答。</p>
+            </div>
+            <div class="ai-compose">
+              <textarea v-model="debugMsg" aria-label="客户消息" placeholder="输入客户消息，Ctrl + Enter 运行" @keydown.ctrl.enter.prevent="runDebug(debugRunModel)"></textarea>
+              <div class="ai-compose-foot"><span class="muted">{{ debugMsg.length }} 字 · 草稿参数</span><div class="ai-actions"><button class="btn btn-plain" :disabled="debugging" @click="runDebug(false)">路由预览</button><button class="btn btn-primary" :disabled="debugging" @click="runDebug(true)">{{ debugging ? '运行中…' : '运行完整链路' }}</button></div></div>
+            </div>
+          </section>
+
+          <section class="ai-panel ai-inspector-panel">
+            <header class="ai-panel-head"><div><h3>链路检查器</h3></div></header>
+            <div class="ai-panel-body">
+              <div class="ai-inspector-tabs" role="tablist">
+                <button type="button" :class="{active:debugInspector==='route'}" @click="debugInspector='route'">路由</button>
+                <button type="button" :class="{active:debugInspector==='retrieval'}" @click="debugInspector='retrieval'">检索</button>
+                <button type="button" :class="{active:debugInspector==='prompt'}" @click="debugInspector='prompt'">Prompt</button>
+                <button type="button" :class="{active:debugInspector==='context'}" @click="debugInspector='context'">上下文</button>
+              </div>
+              <div v-if="!debugResult" class="empty-row">运行后在这里查看完整决策链。</div>
+              <div v-else-if="debugInspector==='route'" class="ai-pipeline" style="margin-top:12px">
+                <div v-if="debugResult.understanding" class="ai-semantic">
+                  <div><span>识别项目</span><strong>{{ debugResult.understanding.project || '未指定' }}</strong></div>
+                  <div><span>咨询维度</span><strong>{{ debugResult.understanding.aspect || '未识别' }}</strong></div>
+                  <div><span>问法完整度</span><strong>{{ debugResult.understanding.complete ? '可检索' : '需要追问' }}</strong></div>
+                  <div><span>上下文继承</span><strong>{{ debugResult.understanding.inheritedProject ? '已继承上轮项目' : '未继承' }}</strong></div>
+                  <div class="wide"><span>实际检索问题</span><strong>{{ debugResult.searchQuery || '本轮不检索' }}</strong></div>
+                </div>
+                <div v-if="debugResult.turnTrace" class="ai-trace-card">
+                  <strong>本轮决策追踪</strong>
+                  <div class="ai-trace-grid">
+                    <span>路由原因：<b>{{ debugResult.turnTrace.routeReason || '—' }}</b></span>
+                    <span>权威领域：<b>{{ debugResult.turnTrace.authorityDomain || '—' }}</b></span>
+                    <span>权威来源：<b>{{ debugResult.turnTrace.authoritySource || '—' }}</b></span>
+                    <span>允许知识降级：<b>{{ debugResult.turnTrace.knowledgeFallbackAllowed ? '是' : '否' }}</b></span>
+                    <span>需要生成模型：<b>{{ debugResult.turnTrace.modelRequired ? '是' : '否' }}</b></span>
+                    <span>路由耗时：<b>{{ debugResult.turnTrace.routingDurationMs || 0 }} ms</b></span>
+                    <span v-if="debugResult.turnTrace.promptVersion">Prompt 版本：<b>{{ debugResult.turnTrace.promptVersion }}</b></span>
+                    <span v-if="debugResult.turnTrace.promptHash">Prompt 指纹：<b>{{ debugResult.turnTrace.promptHash }}</b></span>
+                  </div>
+                </div>
+                <div v-for="(s,i) in debugResult.pipeline" :key="s.key" class="ai-stage">
+                  <span class="ai-stage-num">{{ i + 1 }}</span><div><strong>{{ s.name }}</strong><p>{{ s.detail }}</p></div><span class="ai-status" :class="s.status">{{ debugStatusName(s.status) }}</span>
+                </div>
+              </div>
+              <div v-else-if="debugInspector==='retrieval'" class="ai-hit-list" style="margin-top:12px">
+                <div v-if="debugResult.hits.length === 0" class="empty-row">本次未执行检索或知识库为空。</div>
+                <article v-for="h in debugResult.hits" :key="h.rank" class="ai-hit" :class="{accepted:h.accepted}">
+                  <div class="ai-hit-top"><span class="ai-hit-title">#{{ h.rank }} {{ h.docName }}</span><span class="ai-hit-score">{{ Number(h.distance).toFixed(4) }}</span></div>
+                  <div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap"><span class="ai-status" :class="h.faqDirect ? 'matched' : (h.accepted ? 'passed' : 'rejected')">{{ h.faqDirect ? 'FAQ 直回' : (h.accepted ? '已采用' : '已过滤') }}</span><span class="ai-status passed">{{ h.retrievalMethod || 'vector' }}</span><span v-if="h.project" class="ai-status ready">{{ h.project }}</span><span v-if="h.riskLevel" class="ai-status" :class="h.riskLevel === 'low' ? 'passed' : 'skipped'">{{ h.riskLevel }}</span></div>
+                  <p>{{ h.content }}</p>
+                </article>
+              </div>
+              <div v-else-if="debugInspector==='prompt'" style="margin-top:12px">
+                <div class="ai-actions" style="margin-bottom:8px"><button type="button" class="btn btn-plain" :disabled="!debugResult.prompt" @click="copyDebugPrompt">复制 Prompt</button><span class="muted">{{ debugResult.promptChars || 0 }} 字</span></div>
+                <div v-if="debugResult.promptMeta" class="ai-trace-card">
+                  <strong>本轮 Prompt 组成</strong>
+                  <div class="ai-trace-grid">
+                    <span>组装版本：<b>{{ debugResult.promptMeta.version || '—' }}</b></span>
+                    <span>内容指纹：<b>{{ debugResult.promptMeta.fingerprint || '—' }}</b></span>
+                    <span>System：<b>{{ debugResult.promptMeta.systemChars || 0 }} 字</b></span>
+                    <span>Context：<b>{{ debugResult.promptMeta.contextChars || 0 }} 字</b></span>
+                    <span>User：<b>{{ debugResult.promptMeta.userChars || 0 }} 字</b></span>
+                    <span>启用模块：<b>{{ (debugResult.promptMeta.modules || []).length }} 个</b></span>
+                  </div>
+                  <div class="ai-prompt-modules">
+                    <span v-for="module in (debugResult.promptMeta.modules || [])" :key="module.id" class="ai-prompt-module" :title="'内容指纹 ' + module.contentHash">
+                      <b>{{ module.id }}</b> · {{ module.layer }} · {{ module.version }} · {{ module.charCount }} 字
+                      <template v-if="module.charBudget != null"> / 预算 {{ module.charBudget }}</template>
+                      <span v-if="module.truncated" class="chip chip-warn">已从 {{ module.originalCharCount }} 字裁剪</span>
+                    </span>
+                  </div>
+                </div>
+                <div v-if="debugResult.promptLayers" class="ai-prompt-layers">
+                  <section v-for="layer in debugPromptLayerRows" :key="layer.key" class="ai-prompt-layer">
+                    <header><strong>{{ layer.name }}</strong><span>{{ layer.value.length }} 字</span></header>
+                    <pre class="ai-code">{{ layer.value || '（本层为空）' }}</pre>
+                  </section>
+                </div>
+                <pre v-else class="ai-code">{{ debugResult.prompt || '本路由不需要 Prompt。' }}</pre>
+              </div>
+              <div v-else style="margin-top:12px">
+                <div class="ai-field"><label>模拟画像</label><pre class="ai-code">{{ debugProfile || '（未设置）' }}</pre></div>
+                <div class="ai-field"><label>历史对话</label><pre class="ai-code">{{ debugHistoryText || '（无历史）' }}</pre></div>
+                <div class="ai-field"><label>展示来源</label><pre class="ai-code">{{ debugResult.sources.length ? debugResult.sources.map(s => s.docName + ' · ' + Number(s.distance).toFixed(4)).join('\n') : '（无）' }}</pre></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section v-if="debugCompare" class="ai-panel">
+          <header class="ai-panel-head"><div><h3>线上配置 vs 当前草稿</h3></div><button type="button" class="btn btn-plain" @click="debugCompare=null">关闭</button></header>
+          <div class="ai-panel-body ai-compare">
+            <div class="ai-compare-card"><h4>线上配置</h4><p>路由：{{ debugTypeName(debugCompare.live.replyType) }}<br>候选/采用：{{ debugCompare.live.hits.length }}/{{ debugCompare.live.acceptedCount }}<br>耗时：{{ debugCompare.live.durationMs }} ms</p></div>
+            <div class="ai-compare-card"><h4>草稿参数</h4><p>路由：{{ debugTypeName(debugCompare.draft.replyType) }}<br>候选/采用：{{ debugCompare.draft.hits.length }}/{{ debugCompare.draft.acceptedCount }}<br>耗时：{{ debugCompare.draft.durationMs }} ms</p></div>
+          </div>
+        </section>
+      </template>
+
+      <section v-else-if="tab === 'aidev' && debugSection === 'suite'" class="ai-panel">
+        <header class="ai-panel-head"><div><h3>回归中心</h3></div><div class="ai-actions"><input ref="debugCasesFile" type="file" accept="application/json" hidden @change="importDebugCases"><button class="btn btn-plain" @click="$refs.debugCasesFile.click()">导入</button><button class="btn btn-plain" @click="exportDebugCases">导出</button><button class="btn btn-primary" :disabled="debugSuiteRunning" @click="runDebugSuite">{{ debugSuiteRunning ? '运行中…' : '运行全部' }}</button></div></header>
+        <div class="ai-panel-body">
+          <div class="ai-suite-summary"><span class="ai-suite-stat">用例 {{ debugSuiteStats.total }}</span><span class="ai-suite-stat" style="color:var(--success)">通过 {{ debugSuiteStats.passed }}</span><span class="ai-suite-stat" style="color:var(--danger)">失败 {{ debugSuiteStats.failed }}</span><span class="ai-suite-stat">未运行 {{ debugSuiteStats.pending }}</span></div>
+          <table class="ai-suite-table">
+            <tr><th>用例名</th><th>客户问题</th><th>历史上下文</th><th>期望路由</th><th>内容与链路断言</th><th>实际路由</th><th>结果</th><th></th></tr>
+            <tr v-if="debugCases.length === 0"><td colspan="8" class="empty-row">数据库中暂无已启用回归用例，请新增或导入。</td></tr>
+            <tr v-for="(c,i) in debugCases" :key="c.id">
+              <td><input v-model="c.name" aria-label="用例名"></td><td><input v-model="c.message" aria-label="客户问题"></td>
+              <td><input v-model="c.history" aria-label="用例历史上下文" placeholder="可选"></td>
+              <td><select v-model="c.expected"><option>SAFETY</option><option>INTRO</option><option>FACT</option><option>FAQ</option><option>AGENT</option><option>CLARIFY</option><option>REFUSAL</option><option>AI</option></select></td>
+              <td><details class="ai-case-assertions" :open="!!(c.expectedAnswerPoints || c.forbiddenAnswerPoints || c.expectedAuthorityDomain || c.expectedAuthoritySource || c.expectedModelInvoked != null)"><summary>{{ regressionAssertionSummary(c) }}</summary><div class="ai-case-assertions-grid">
+                <label>必须包含（分号=全部，|=任选）<textarea v-model="c.expectedAnswerPoints" placeholder="298元；8元|订金八元"></textarea></label>
+                <label>禁止出现（分号=任一都禁止）<textarea v-model="c.forbiddenAnswerPoints" placeholder="保证；百分百"></textarea></label>
+                <label>权威领域<input v-model="c.expectedAuthorityDomain" placeholder="可选，如 project"></label>
+                <label>权威来源<input v-model="c.expectedAuthoritySource" placeholder="可选，如 project_catalog"></label>
+                <label>生成模型<select v-model="c.expectedModelInvoked"><option :value="null">不检查</option><option :value="true">必须调用</option><option :value="false">不得调用</option></select></label>
+              </div></details></td>
+              <td>{{ c.actual ? debugTypeName(c.actual) : '—' }}</td><td class="ai-case-result"><span :class="c.passed === true ? 'ai-suite-pass' : (c.passed === false ? 'ai-suite-fail' : '')">{{ c.passed === true ? '通过' : (c.passed === false ? '失败' : '未运行') }}</span><small v-if="c.assertionFailures" class="ai-case-failures">{{ c.assertionFailures }}</small></td>
+              <td><button class="btn btn-plain" :disabled="debugSuiteRunning" @click="runDebugCase(c)">运行</button><button class="btn btn-plain" @click="saveDebugCase(c)">保存</button><button class="btn btn-danger" @click="removeDebugCase(c,i)">删除</button></td>
+            </tr>
+          </table>
+          <div class="ai-actions" style="margin-top:12px"><button class="btn btn-plain" @click="addDebugCase">＋ 新增用例</button><button class="btn btn-plain" @click="resetDebugCases">恢复默认用例</button></div>
+        </div>
+      </section>
+
+      <section v-else-if="tab === 'aiconfig'" class="ai-panel">
+        <header class="ai-panel-head"><div><h3>长期策略配置</h3></div><div class="ai-actions"><button class="btn btn-plain" @click="switchTab('homecfg')">首页文案</button><button class="btn btn-plain" @click="switchTab('forbidden')">禁说词</button><button class="btn btn-plain" :disabled="!configUnsavedCount" @click="resetConfigDrafts">撤销未保存编辑</button><button class="btn btn-plain" :disabled="!configUnsavedCount" @click="saveAllConfigs">保存 {{ configUnsavedCount }} 项修改</button><button class="btn btn-plain" :disabled="!promptPendingCount || promptGatePolling || promptReleaseBusy || (promptWorkspace && promptWorkspace.draft && promptWorkspace.draft.stale)" @click="runPromptRegressionGate">{{ promptGatePolling ? '发布检查中…' : '运行发布检查' }}</button><button class="btn btn-primary" :title="promptGatePassed ? '检查已通过，可以发布' : '必须先保存草稿并通过发布检查'" :disabled="!promptPendingCount || !promptGatePassed || promptReleaseBusy || promptGatePolling || (promptWorkspace && promptWorkspace.draft && promptWorkspace.draft.stale)" @click="publishPromptDraft">{{ promptReleaseBusy ? '处理中…' : '发布 Prompt 版本' }}</button></div></header>
+        <div class="ai-panel-body">
+          <div class="prompt-release-card">
+            <div class="prompt-release-top">
+              <div class="prompt-release-status">
+                <strong>线上 Prompt：{{ promptCurrentVersion }}</strong>
+                <span>· {{ promptPendingCount ? promptPendingCount + ' 项草稿待处理' : '没有待发布草稿' }}</span>
+                <span v-if="promptWorkspace && promptWorkspace.draft && promptWorkspace.draft.updateTime">· 草稿保存于 {{ formatDateTime(promptWorkspace.draft.updateTime) }}</span>
+                <span>· 发布检查：<strong>{{ promptGateStatusLabel }}</strong><template v-if="promptGateTask && promptGateTask.requestedCount">（{{ promptGateTask.processedCount || 0 }}/{{ promptGateTask.requestedCount }}）</template></span>
+              </div>
+              <div class="ai-actions"><button class="btn btn-plain" :disabled="!promptDraftCount" title="将主对话相关草稿带入 AI 调优中心；画像与质量评测提示词请在对应功能中验证" @click="usePromptDraftInDebugger">在对话模拟器测试</button><button class="btn btn-plain" :disabled="!promptSavedDraftCount || promptReleaseBusy" @click="discardPromptDraft">放弃已保存草稿</button><button class="btn btn-plain" @click="togglePromptHistory">{{ promptHistoryOpen ? '收起版本历史' : '版本历史' }}</button></div>
+            </div>
+            <p v-if="promptWorkspace && promptWorkspace.draft && promptWorkspace.draft.stale" class="prompt-release-warning">线上已经发布了更新版本，这份草稿基于旧版本，不能直接发布。请先查看差异并放弃旧草稿后重新编辑。</p>
+            <p v-else-if="promptUnsavedEditCount" class="prompt-release-warning">还有 {{ promptUnsavedEditCount }} 项 Prompt 编辑尚未保存；运行发布检查时会先保存这些编辑。</p>
+            <p v-else-if="promptSavedDraftCount && !promptGatePassed" class="prompt-release-warning">发布前必须通过全部启用回归用例。草稿或用例发生变化后，已通过状态会自动失效。</p>
+            <div v-if="promptGateTask && promptGateTask.status==='failed'" class="prompt-gate-failures"><div v-if="promptGateTask.errorMessage" class="prompt-gate-failure">{{ promptGateTask.errorMessage }}</div><div v-for="failure in (promptGateTask.failures || []).slice(0,5)" :key="failure.caseId" class="prompt-gate-failure"><strong>{{ failure.name || ('用例 #' + failure.caseId) }}</strong>：{{ (failure.reasons || []).join('；') }}</div></div>
+          </div>
+          <section v-if="promptHistoryOpen" class="prompt-history">
+            <div class="prompt-history-head"><h3>Prompt 版本历史</h3><span class="muted">回滚会生成新版本，不会删除历史</span></div>
+            <div class="table-wrap"><table><tr><th>版本</th><th>操作</th><th>变更</th><th>操作人</th><th>时间</th><th></th></tr><tr v-if="!promptHistory.length"><td colspan="6" class="empty-row">暂无版本记录</td></tr><tr v-for="release in promptHistory" :key="release.id"><td><strong>{{ release.version }}</strong><span v-if="promptWorkspace && promptWorkspace.currentRelease && promptWorkspace.currentRelease.id===release.id" class="chip chip-ok">当前</span></td><td>{{ promptActionLabel(release.action) }}<small v-if="release.sourceVersion" class="muted"> · 来源 {{ release.sourceVersion }}</small></td><td>{{ (release.changedKeys || []).length }} 项</td><td>{{ release.createdBy || '—' }}</td><td class="muted">{{ formatDateTime(release.createTime) }}</td><td><button class="btn btn-plain" @click="viewPromptRelease(release.id)">查看差异</button><button class="btn btn-plain" :disabled="promptWorkspace && promptWorkspace.currentRelease && promptWorkspace.currentRelease.id===release.id" @click="rollbackPromptRelease(release)">回滚到此版本</button></td></tr></table></div>
+            <div v-if="promptReleaseDetail" class="prompt-diff-list">
+              <div class="prompt-history-head"><h3>{{ promptReleaseDetail.release.version }} {{ promptReleaseDetail.current ? '相对前一版本' : '与当前线上版本的差异' }}</h3><button class="btn btn-plain" @click="promptReleaseDetail=null">关闭差异</button></div>
+              <div v-if="!promptReleaseDiffRows().length" class="empty-row">该版本没有可见配置差异（通常为首次基线版本）。</div>
+              <article v-for="diff in promptReleaseDiffRows()" :key="diff.key" class="prompt-diff-item"><h4>{{ diff.label }} <span class="muted">{{ diff.key }}</span></h4><div class="prompt-diff-columns"><div><small class="muted">{{ promptReleaseDetail.current ? '修改前' : '当前线上' }}</small><pre class="ai-code">{{ diff.before || '（空）' }}</pre></div><div><small class="muted">{{ promptReleaseDetail.current ? '修改后' : '所选版本' }}</small><pre class="ai-code">{{ diff.after || '（空）' }}</pre></div></div></article>
+            </div>
+          </section>
+          <div class="ai-config-toolbar">
+            <input type="text" v-model.trim="configSearch" placeholder="搜索设置名称、说明或配置键">
+            <span class="muted">共 {{ configItems.length }} 项<span v-if="role !== 'super_admin'"> · 高级模型参数仅超级管理员可见</span></span>
+          </div>
+          <nav class="ai-config-categories" aria-label="AI 配置功能分类">
+            <button v-for="category in configCategories" :key="category.name" type="button" class="ai-config-category" :class="{active:!configSearch && activeConfigGroup===category.name}" :aria-pressed="!configSearch && activeConfigGroup===category.name" @click="selectConfigGroup(category.name)">
+              <span><strong>{{ category.name }}</strong></span>
+              <span class="ai-config-category-meta">{{ category.count }} 项<b v-if="category.dirty">{{ category.dirty }} 项待发布</b></span>
+            </button>
+          </nav>
+          <div class="ai-config-context">
+            <span v-if="configSearch">正在跨分类搜索“{{ configSearch }}”，共 {{ displayedConfigCount }} 项结果</span>
+            <span v-else>当前分类：{{ activeConfigGroup }} · 每次只展示一个功能区</span>
+            <button v-if="configSearch" type="button" class="btn btn-plain" @click="configSearch=''">清除搜索</button>
+          </div>
+          <div v-if="!displayedAiConfigGroups.length" class="ai-chat-empty">没有匹配的设置</div>
+          <div class="ai-config-grid">
+            <section v-for="group in displayedAiConfigGroups" :key="group.name" class="ai-config-group">
+              <div class="ai-config-group-head"><h3>{{ group.name }}</h3><span>{{ group.items.length }} 项</span></div>
+              <div class="ai-config-group-grid">
+                <article v-for="c in group.items" :key="c.key" class="ai-config-card" :class="{wide:c.multiline, 'is-error':configError(c)}">
+                  <h3>{{ c.label }}<span v-if="c.versionedPrompt" class="ai-config-badge">版本管理</span><span v-if="c.advanced" class="ai-config-badge">超级管理员</span></h3>
+                  <p v-if="c.value !== c.original"><span class="ai-dirty">{{ c.versionedPrompt ? (c.value===c.draftValue ? 'Prompt 草稿已保存' : 'Prompt 草稿尚未保存') : '草稿已修改' }}</span></p>
+                   <textarea v-if="c.multiline" v-model="c.value" :placeholder="c.placeholder" @input="c.touched=true"></textarea>
+                   <select v-else-if="c.input==='boolean'" v-model="c.value" @change="c.touched=true"><option value="true">开启</option><option value="false">关闭</option></select>
+                   <input v-else v-model="c.value" :type="c.input==='number'||c.input==='integer' ? 'number' : 'text'" :step="c.step" :min="c.min" :max="c.max" :placeholder="c.placeholder" @input="c.touched=true">
+                   <div v-if="c.input==='number'||c.input==='integer'" class="ai-config-number-meta">
+                     <span class="ai-config-number-range"><span>可填写范围：<strong>{{ formatConfigBound(c.min) }} ～ {{ formatConfigBound(c.max) }}</strong></span><span>默认值：<strong>{{ c.defaultValue }}</strong></span><span>步进：<strong>{{ c.step }}</strong></span></span>
+                     <span class="ai-config-help">
+                       <button type="button" class="ai-config-help-button" :aria-label="'查看“' + c.label + '”填写说明'" :aria-describedby="configHelpId(c)" @click.prevent>
+                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 10.8v5.3"></path><path d="M12 7.4h.01"></path></svg>
+                       </button>
+                       <span :id="configHelpId(c)" role="tooltip" class="ai-config-tooltip">{{ c.help || c.desc }}</span>
+                     </span>
+                   </div>
+                   <div class="ai-config-error">{{ c.touched ? configError(c) : '' }}</div>
+                  <div class="ai-actions"><button class="btn btn-plain" :disabled="c.value===c.defaultValue" @click="restoreConfigDefault(c)">恢复默认</button><button class="btn btn-plain" :disabled="c.value===(c.versionedPrompt ? c.draftValue : c.original)" @click="c.value=c.versionedPrompt?c.draftValue:c.original;c.touched=false">撤销编辑</button><button class="btn btn-primary" :disabled="c.value===(c.versionedPrompt ? c.draftValue : c.original)" @click="saveConfig(c)">{{ c.versionedPrompt ? '保存草稿' : '发布此项' }}</button></div>
+                </article>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 首页文案：从 AI 配置中心「首页展示」分组独立出来的专属编辑页 -->
+    <div v-show="tab === 'homecfg'" class="ai-lab">
+      <section class="ai-lab-hero">
+        <div>
+          <h2>首页文案</h2>
+        </div>
+        <button type="button" class="btn btn-plain ai-lab-back" @click="switchTab('aiconfig')">← 返回 AI 策略配置</button>
+      </section>
+      <section class="ai-panel">
+        <header class="ai-panel-head"><div><h3>首页展示配置</h3></div><div class="ai-actions"><button class="btn btn-plain" :disabled="!configUnsavedCount" @click="resetConfigDrafts">撤销编辑</button><button class="btn btn-primary" :disabled="!configUnsavedCount" @click="saveAllConfigs">保存 {{ configUnsavedCount }} 项修改</button></div></header>
+        <div class="ai-panel-body">
+          <div v-if="!homeConfigGroups.length" class="ai-chat-empty">正在加载首页配置…</div>
+          <div class="ai-config-grid">
+            <section v-for="group in homeConfigGroups" :key="group.name" class="ai-config-group">
+              <div class="ai-config-group-head"><h3>{{ group.name }}</h3><span>{{ group.items.length }} 项</span></div>
+              <div class="ai-config-group-grid">
+                <article v-for="c in group.items" :key="c.key" class="ai-config-card" :class="{wide:c.multiline, 'is-error':configError(c)}">
+                  <h3>{{ c.label }}<span v-if="c.advanced" class="ai-config-badge">超级管理员</span></h3>
+                  <p v-if="c.value !== c.original"><span class="ai-dirty">草稿已修改</span></p>
+                   <textarea v-if="c.multiline" v-model="c.value" :placeholder="c.placeholder" @input="c.touched=true"></textarea>
+                   <select v-else-if="c.input==='boolean'" v-model="c.value" @change="c.touched=true"><option value="true">开启</option><option value="false">关闭</option></select>
+                   <input v-else v-model="c.value" :type="c.input==='number'||c.input==='integer' ? 'number' : 'text'" :step="c.step" :min="c.min" :max="c.max" :placeholder="c.placeholder" @input="c.touched=true">
+                   <div v-if="c.input==='number'||c.input==='integer'" class="ai-config-number-meta">
+                     <span class="ai-config-number-range"><span>可填写范围：<strong>{{ formatConfigBound(c.min) }} ～ {{ formatConfigBound(c.max) }}</strong></span><span>默认值：<strong>{{ c.defaultValue }}</strong></span><span>步进：<strong>{{ c.step }}</strong></span></span>
+                     <span class="ai-config-help">
+                       <button type="button" class="ai-config-help-button" :aria-label="'查看“' + c.label + '”填写说明'" :aria-describedby="configHelpId(c)" @click.prevent>
+                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 10.8v5.3"></path><path d="M12 7.4h.01"></path></svg>
+                       </button>
+                       <span :id="configHelpId(c)" role="tooltip" class="ai-config-tooltip">{{ c.help || c.desc }}</span>
+                     </span>
+                   </div>
+                   <div class="ai-config-error">{{ c.touched ? configError(c) : '' }}</div>
+                  <div class="ai-actions"><button class="btn btn-plain" :disabled="c.value===c.defaultValue" @click="restoreConfigDefault(c)">恢复默认</button><button class="btn btn-plain" :disabled="c.value===c.original" @click="c.value=c.original;c.touched=false">撤销</button><button class="btn btn-primary" :disabled="c.value===c.original" @click="saveConfig(c)">发布此项</button></div>
+                </article>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 禁说词管理：从「情绪与安全」独立出来的列表式维护页 -->
+    <div v-show="tab === 'forbidden'" class="ai-lab">
+      <section class="ai-lab-hero">
+        <div>
+          <h2>禁说词管理</h2>
+        </div>
+      </section>
+      <section class="ai-panel">
+        <header class="ai-panel-head"><div><h3>绝对禁说词（{{ forbiddenWordsList.length }}）</h3></div><div class="ai-actions"><button class="btn btn-plain" :disabled="!forbiddenDirty" @click="resetForbidden">撤销</button><button class="btn btn-primary" :disabled="!forbiddenDirty" @click="saveForbidden">发布禁说词</button></div></header>
+        <div class="ai-panel-body">
+          <div v-if="!forbiddenItem" class="ai-chat-empty">正在加载…</div>
+          <template v-else>
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+              <input type="text" v-model="newForbiddenWord" @keyup.enter="addForbiddenWord" placeholder="输入一条禁说词/短语，回车添加" style="flex:1">
+              <button class="btn btn-primary" @click="addForbiddenWord">添加</button>
+            </div>
+            <div v-if="!forbiddenWordsList.length" class="ai-chat-empty">暂无禁说词，添加后将立即对所有对话生效。</div>
+            <ul style="list-style:none;padding:0;margin:0 0 18px">
+              <li v-for="w in forbiddenWordsList" :key="w" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border,#e5e7eb);border-radius:8px;margin-bottom:8px;background:#fff">
+                <span style="word-break:break-all">{{ w }}</span>
+                <button class="btn btn-plain" @click="removeForbiddenWord(w)">删除</button>
+              </li>
+            </ul>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <label style="font-weight:600">命中策略</label>
+              <select v-model="forbiddenActionItem.value" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border,#e5e7eb)">
+                <option value="delete">delete · 逐句删除（推荐）</option>
+                <option value="handoff">handoff · 整轮转人工</option>
+                <option value="replace">replace · 整条换安全话术</option>
+                <option value="mask">mask · 替换为 ××</option>
+              </select>
+              <span class="muted">{{ forbiddenActionItem.value === 'delete' ? '删掉含禁词的整句，其余照发' : forbiddenActionItem.value === 'handoff' ? '整轮转人工' : forbiddenActionItem.value === 'replace' ? '整条换成安全话术' : '把禁词替换为 ××' }}</span>
+            </div>
+          </template>
+        </div>
+      </section>
+    </div>
+
+    <!-- AI 质量评测：规则仅做风险扫描，AI / 人工完成后才形成质量分 -->
+    <div v-show="tab === 'quality' && canManageQuality && canViewConversations" class="sub-tabs" role="tablist" aria-label="质量中心子页签">
+      <button type="button" role="tab" :aria-selected="qualitySubTab === 'eval'" :class="{ active: qualitySubTab === 'eval' }" @click="qualitySubTab = 'eval'">评测</button>
+      <button type="button" role="tab" :aria-selected="qualitySubTab === 'conv'" :class="{ active: qualitySubTab === 'conv' }" @click="qualitySubTab = 'conv'">真实会话</button>
+    </div>
+    <div v-show="tab === 'quality' && canManageQuality && (qualitySubTab === 'eval' || !canViewConversations)" class="quality-page">
+      <section class="quality-hero">
+        <div>
+          <h2>AI 对话质量评测</h2>
+        </div>
+        <div class="quality-actions">
+          <label class="quality-model-picker"><span>本次评测方式</span><select v-model="qualityJudgeProvider" :disabled="qualityScoring" aria-label="本次评测使用的模型">
+            <option v-for="model in qualityJudgeModels" :key="model.provider" :value="model.provider" :disabled="model.provider!=='rules' && !qualityAiJudgeEnabled">{{ qualityJudgeOptionLabel(model) }}</option>
+          </select></label>
+          <button class="btn btn-plain" :disabled="qualityLoading" @click="loadQuality">刷新</button>
+          <button class="btn btn-primary" :disabled="qualityScoring" @click="batchScoreQuality">{{ qualityScoring ? '评测中…' : '评测待处理会话' }}</button>
+          <button class="btn btn-plain" :disabled="qualityLoading" @click="qualityRulesOpen=true">查看评分规则</button>
+        </div>
+      </section>
+
+      <div class="quality-notice">规则扫描不产生质量分；选择 AI 模型才会生成语义评分。<span v-if="!qualityAiJudgeEnabled"> 当前 AI 语义复核未开启。</span></div>
+
+      <section v-if="qualityBatchTask && qualityBatchTask.found" class="quality-batch-task">
+        <div class="quality-batch-head">
+          <span><strong>批量评测 #{{ qualityBatchTask.id }} · {{ qualityBatchStatusLabel(qualityBatchTask.status) }}</strong><template v-if="qualityBatchTask.currentConversationId"> · 正在处理 {{ qualityBatchTask.currentConversationId }}</template></span>
+          <span>{{ qualityBatchTask.processedCount || 0 }} / {{ qualityBatchTask.requestedCount || 0 }} · 成功 {{ qualityBatchTask.succeededCount || 0 }} · 失败 {{ qualityBatchTask.failedCount || 0 }}</span>
+        </div>
+        <div class="quality-batch-track"><span class="quality-batch-fill" :style="{width:qualityBatchProgress(qualityBatchTask)+'%'}"></span></div>
+        <p v-if="qualityBatchTask.errorMessage" class="muted" style="margin-top:8px">{{ qualityBatchTask.errorMessage }}</p>
+      </section>
+
+      <section class="quality-kpis">
+        <article class="quality-kpi"><span>平均质量分（仅已语义评分）</span><strong class="good">{{ qualityOverview.averageScore || 0 }}</strong></article>
+        <article class="quality-kpi"><span>已完成质量评分</span><strong>{{ qualityOverview.scoredCount || 0 }}</strong></article>
+        <article class="quality-kpi"><span>待语义评分</span><strong class="warn">{{ qualityOverview.pendingSemanticCount || 0 }}</strong></article>
+        <article class="quality-kpi"><span>低分会话（&lt;{{ qualityOverview.lowScoreThreshold || 70 }}）</span><strong class="warn">{{ qualityOverview.lowScoreCount || 0 }}</strong></article>
+        <article class="quality-kpi"><span>待人工复核</span><strong>{{ qualityOverview.pendingReviewCount || 0 }}</strong></article>
+      </section>
+
+      <section class="quality-grid">
+        <div class="quality-panel">
+          <h3>七维平均得分（仅已语义评分）</h3>
+          <div v-for="d in qualityDimensionRows" :key="d.key" class="quality-dim">
+            <span>{{ d.name }}</span><span class="quality-track"><span class="quality-fill" :style="{width:d.pct+'%'}"></span></span><b>{{ d.value }}/{{ d.max }}</b>
+          </div>
+        </div>
+        <div class="quality-panel">
+          <h3>常见问题分类</h3>
+          <div v-if="!(qualityOverview.commonIssues || []).length" class="empty-row">评分后会在这里聚合扣分原因</div>
+          <div class="quality-issues"><span v-for="issue in qualityOverview.commonIssues" :key="issue.category" class="quality-issue"><span>{{ issue.category }}</span><b>{{ issue.count }}</b></span></div>
+        </div>
+      </section>
+
+      <section class="quality-panel">
+        <h3>近 14 天质量趋势</h3>
+        <div class="quality-trend">
+          <div v-for="(point,i) in qualityOverview.trend || []" :key="point.day" class="quality-trend-col" :title="qualityTrendTitle(point)">
+            <span class="quality-trend-bar" :style="{height:qualityTrendHeight(point.score)+'%'}"></span>
+            <small v-if="i===0 || i===(qualityOverview.trend||[]).length-1 || i%3===0">{{ formatTrendDay(point.day) }}</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="form-row" style="justify-content:space-between">
+          <h2 style="margin:0">评测记录（共 {{ qualityTotal }} 条）</h2>
+          <div class="quality-filters">
+            <select v-model="qualityFilter.days" @change="loadQualityRows(1)"><option value="">全部时间</option><option value="7">近 7 天</option><option value="30">近 30 天</option></select>
+            <input type="number" min="0" max="100" v-model="qualityFilter.minScore" placeholder="最低分">
+            <input type="number" min="0" max="100" v-model="qualityFilter.maxScore" placeholder="最高分">
+            <select v-model="qualityFilter.status"><option value="">全部阶段</option><option value="pending">待语义评分</option><option value="scored">待人工复核</option><option value="reviewed">已人工复核</option><option value="failed">最近评测失败</option></select>
+            <select v-model="qualityFilter.channel"><option value="">全部渠道</option><option value="web">网页</option><option value="kf">企微客服</option></select>
+            <select v-model="qualityFilter.issueType"><option value="">全部问题</option><option v-for="item in qualityOverview.commonIssues || []" :key="item.category" :value="item.category">{{ item.category }}</option></select>
+            <button class="btn btn-plain" @click="loadQualityRows(1)">筛选</button>
+            <button class="btn btn-plain" :disabled="reportExporting" @click="exportQualityEvaluations">⬇ 导出 CSV</button>
+          </div>
+        </div>
+        <table>
+          <tr><th>质量分</th><th>首条问题</th><th>渠道</th><th>问题</th><th>评测来源</th><th>复核状态</th><th>最近处理时间</th><th>操作</th></tr>
+          <tr v-if="!qualityRows.length"><td colspan="8" class="empty-row">暂无符合当前筛选条件的评测记录</td></tr>
+          <tr v-for="row in qualityRows" :key="row.id">
+            <td><span v-if="row.qualityScored" class="quality-score" :class="qualityScoreClass(row.totalScore)">{{ row.totalScore }}</span><span v-else class="chip chip-new" :title="'规则风险分 ' + row.riskScore + '，不代表质量分'">待语义评分</span></td>
+            <td class="ellipsis-wide" :title="row.firstQuestion">{{ row.firstQuestion || '—' }}</td>
+            <td>{{ row.channel === 'kf' ? '企微客服' : '网页' }}</td>
+            <td>{{ (row.issues || []).length }} 项</td>
+            <td :title="row.judgeErrorMessage || ''">{{ qualityJudgeSource(row) }}</td>
+            <td><span class="chip" :class="isQualityScoring(row.conversationId)?'chip-new':(row.status==='reviewed'?'chip-done':'chip-new')">{{ isQualityScoring(row.conversationId) ? '正在评测中…' : (row.status==='reviewed' ? '已人工复核' : (row.qualityScored ? '待人工复核' : '待语义评分')) }}</span></td>
+            <td class="muted">{{ formatDateTime(row.reviewedAt || row.judgeErrorAt || row.evaluatedAt) }}</td>
+            <td><button class="btn btn-plain" @click="openQualityDetail(row)">查看</button><button class="btn btn-plain" :disabled="qualityScoring || isQualityScoring(row.conversationId)" @click="scoreQuality(row.conversationId)">{{ isQualityScoring(row.conversationId) ? '正在评测中…' : '重评' }}</button></td>
+          </tr>
+        </table>
+        <div class="pager">
+          <button class="btn btn-plain" :disabled="qualityPage<=1" @click="loadQualityRows(qualityPage-1)">上一页</button>
+          <span class="muted">第 {{ qualityPage }} / {{ totalQualityPages }} 页 · 共 {{ qualityTotal }} 条</span>
+          <button class="btn btn-plain" :disabled="qualityPage>=totalQualityPages" @click="loadQualityRows(qualityPage+1)">下一页</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="qualityDetailOpen" class="kb-mask" @click.self="qualityDetailOpen=false">
+      <div class="kb-modal quality-detail-modal" role="dialog" aria-modal="true" aria-label="AI 评分详情">
+        <div class="kb-modal-head"><h2>评测详情 · <template v-if="(qualityDetail || {}).qualityScored">{{ qualityDetail.totalScore }} 分（{{ qualityDetail.grade }}）</template><template v-else>待语义评分</template></h2><button class="btn btn-plain" @click="qualityDetailOpen=false">✕ 关闭</button></div>
+        <div class="kb-modal-body">
+          <div class="quality-detail-grid">
+            <section><h3 style="margin-bottom:10px">对话原文</h3><div class="quality-transcript"><div v-for="m in qualityDetail.messages || []" :key="m.id" class="quality-message" :class="m.role"><span class="quality-message-label">{{ m.role==='user'?'客户':m.role==='agent'?'人工坐席':'AI 客服' }} · {{ formatDateTime(m.createTime) }}</span>{{ m.content }}<details v-if="decisionTraceOf(m)" class="quality-trace"><summary>查看本轮决策追踪</summary><pre>{{ formatDecisionTrace(decisionTraceOf(m)) }}</pre></details></div></div></section>
+            <section>
+              <div v-if="qualityDetail.judgeErrorMessage" class="quality-judge-failure">
+                <strong>{{ qualityDetail.qualityScored ? '最近一次重新评测失败，已保留上一次有效评分' : '语义复核未成功' }}</strong>
+                <p>{{ qualityJudgeFailureLabel(qualityDetail) }}：{{ qualityDetail.judgeErrorMessage }}</p>
+                <small>{{ qualityJudgeAttemptLabel(qualityDetail) }}<template v-if="qualityDetail.judgeErrorAt"> · {{ formatDateTime(qualityDetail.judgeErrorAt) }}</template></small>
+              </div>
+              <h3 style="margin-bottom:10px">{{ qualityDetail.qualityScored ? '七维质量评分' : '规则扫描维度（非质量分）' }}</h3>
+              <div v-for="d in qualityDetailDimensions" :key="d.key" class="quality-dim"><span>{{ d.name }}</span><span class="quality-track"><span class="quality-fill" :style="{width:d.pct+'%'}"></span></span><b>{{ d.value }}/{{ d.max }}</b></div>
+              <p class="muted" style="margin:10px 0">规则风险分 {{ qualityDetail.ruleScore }}<span v-if="qualityDetail.judgeEnabled && qualityDetail.evaluationVersion==='semantic-v3'"> · {{ qualityJudgeModelLabel(qualityDetail) }}语义分 {{ qualityDetail.judgeScore }}</span><span v-else-if="qualityDetail.judgeEnabled"> · 历史评测结果</span><span v-else> · 非最终质量分</span></p>
+              <h3 style="margin:12px 0 8px">扣分原因</h3>
+              <div v-if="!(qualityDetail.issues || []).length" class="quality-notice">{{ qualityDetail.qualityScored ? '语义复核未发现明确问题。' : '规则未发现明确风险，但这不代表回答质量满分；仍需 AI 语义评分或人工复核。' }}</div>
+              <div v-for="(issue,i) in qualityDetail.issues || []" :key="i" class="quality-finding">
+                <strong>{{ issue.category }} · {{ issue.description }}</strong>
+                <span class="quality-issue-tag">{{ qualityDimName(issue.dimension) }} · 扣 {{ issue.deduction }} 分</span>
+                <p>{{ issue.evidence }}</p>
+              </div>
+              <h3 style="margin:12px 0 8px">改进建议</h3>
+              <div v-for="(suggestion,i) in qualityDetail.suggestions || []" :key="i" class="quality-finding"><p>{{ i+1 }}. {{ suggestion }}</p></div>
+              <div class="quality-rescore">
+                <h3>重新评测</h3>
+                <div class="quality-actions" style="justify-content:flex-start">
+                  <label class="quality-model-picker"><span>评测模型</span><select v-model="qualityDetailJudgeProvider" :disabled="isQualityScoring(qualityDetail.conversationId)" aria-label="详情重评使用的模型">
+                    <option v-for="model in qualityJudgeModels" :key="'detail-'+model.provider" :value="model.provider" :disabled="model.provider!=='rules' && !qualityAiJudgeEnabled">{{ qualityJudgeOptionLabel(model) }}</option>
+                  </select></label>
+                  <button class="btn btn-primary" :disabled="isQualityScoring(qualityDetail.conversationId)" @click="scoreQualityDetail">{{ isQualityScoring(qualityDetail.conversationId) ? '正在评测中…' : '重新评测' }}</button>
+                </div>
+                <p v-if="!qualityAiJudgeEnabled">AI 语义复核当前未开启，只能执行规则风险扫描；可在“AI 策略配置 → 质量评测”中开启。</p>
+              </div>
+              <div class="quality-review">
+                <h3>评测历史 <span class="muted">· 最近 {{ (qualityDetail.attempts || []).length }} 次</span></h3>
+                <div v-if="!(qualityDetail.attempts || []).length" class="empty-row">暂无可追溯的评测尝试</div>
+                <div class="quality-attempts">
+                  <div v-for="attempt in qualityDetail.attempts || []" :key="attempt.id" class="quality-attempt">
+                    <b>{{ qualityAttemptStatusLabel(attempt.status) }}<template v-if="attempt.totalScore != null"> · {{ attempt.judgeProvider==='rules' ? '风险分 ' : '质量分 ' }}{{ attempt.totalScore }}</template></b>
+                    <span>{{ qualityAttemptModelLabel(attempt) }} · Prompt {{ attempt.promptVersion || '—' }}<template v-if="attempt.judgeTemperature != null"> · 随机度 {{ attempt.judgeTemperature }}</template></span>
+                    <small>{{ attempt.durationMs == null ? '—' : attempt.durationMs + ' ms' }} · {{ formatDateTime(attempt.finishTime || attempt.createTime) }}</small>
+                    <span v-if="attempt.errorMessage" class="quality-attempt-error">{{ qualityAttemptErrorLabel(attempt.errorCode) }}：{{ attempt.errorMessage }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="quality-review">
+                <h3>人工复核</h3>
+                <select v-model="qualityReview.result" style="margin-top:8px"><option value="agree">同意评分</option><option value="disagree">不同意评分</option><option value="adjusted">调整评分</option></select>
+                <div v-if="qualityReview.result==='adjusted'" class="quality-adjust"><label v-for="d in qualityReviewDimensions" :key="d.key"><span>{{ d.name }} / {{ d.max }}</span><input type="number" min="0" :max="d.max" v-model.number="qualityReview.scores[d.key]"></label></div>
+                <textarea v-model="qualityReview.note" placeholder="可填写复核说明或修改依据"></textarea>
+                <div class="quality-actions" style="justify-content:flex-start"><button class="btn btn-primary" @click="reviewQuality">保存人工复核</button><button class="btn btn-plain" @click="addQualityRegression">加入回归用例</button><button class="btn btn-plain" @click="retestQualityInLab">到 AI 调优中心复测</button></div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 评分规则 -->
+    <div v-if="qualityRulesOpen" class="kb-mask" @click.self="qualityRulesEditMode || (qualityRulesOpen=false)">
+      <div class="kb-modal quality-detail-modal" role="dialog" aria-modal="true" aria-label="评分规则">
+        <div class="kb-modal-head">
+          <h2>评分规则</h2>
+          <div class="quality-rules-head-actions">
+            <button v-if="!qualityRulesEditMode" class="btn btn-plain" @click="qualityRulesOpen=false">✕ 关闭</button>
+            <button v-if="!qualityRulesEditMode" class="btn btn-primary" @click="startEditRules">编辑规则</button>
+            <template v-else>
+              <button class="btn btn-plain" :disabled="qualityRulesSaving" @click="cancelEditRules">取消</button>
+              <button class="btn btn-primary" :disabled="qualityRulesSaving" @click="saveQualityRules">保存</button>
+            </template>
+          </div>
+        </div>
+        <div class="kb-modal-body">
+          <p class="muted" style="margin:0 0 14px">规则风险分不是最终质量分。</p>
+          <p v-if="qualityRulesEditMode" class="quality-edit-tip">保存后立即生效。</p>
+          <h3 style="margin:6px 0 10px">七维维度</h3>
+          <div class="quality-rules-dims">
+            <div v-for="d in qualityRuleDimensions()" :key="d.key" class="quality-rule-dim"><b>{{ d.name }}</b><span>满分 {{ d.max }}</span></div>
+          </div>
+          <h3 style="margin:18px 0 10px">规则清单（命中即扣分）</h3>
+          <div class="quality-rules">
+            <div v-for="r in (qualityRulesEditMode ? qualityRulesDraft : qualityRulesList)" :key="r.code" class="quality-rule">
+              <div class="quality-rule-head">
+                <code>{{ r.code }}</code>
+                <span class="quality-rule-cat">{{ r.category }}</span>
+                <span class="quality-rule-dim-tag">{{ qualityDimName(r.dimension) }}</span>
+                <span class="quality-rule-deduction" v-if="!qualityRulesEditMode">-{{ r.deduction }}</span>
+                <label v-else class="switch-field quality-rule-toggle">
+                  <span class="switch"><input type="checkbox" v-model="r.enabled" :aria-label="'启用 ' + r.code"><span class="slider"></span></span>
+                  <span class="switch-text">{{ r.enabled ? '启用' : '已停用' }}</span>
+                </label>
+              </div>
+              <div class="quality-rule-body">
+                <div><b>触发条件：</b>{{ r.trigger }}</div>
+                <div v-if="r.note"><b>跨维度影响：</b>{{ r.note }}</div>
+                <div v-if="qualityRulesEditMode" class="qr-edit-block">
+                  <b>扣分：</b>
+                  <span v-for="(val, dim) in (r.allDeductions || {})" :key="dim" class="qr-deduction-edit">
+                    <label :title="dim">{{ qualityDimName(dim) }}</label>
+                    <input type="number" min="0" max="50" v-model.number="r.allDeductions[dim]" class="qr-deduction-input" :aria-label="qualityDimName(dim) + ' 扣分'">
+                  </span>
+                </div>
+                <div v-else-if="r.deduction != null"><b>主扣分：</b>-{{ r.deduction }}<span class="muted" v-if="r.allDeductions && Object.keys(r.allDeductions).length > 1">（共 {{ Object.keys(r.allDeductions).length }} 个维度）</span></div>
+                <div v-if="qualityRulesEditMode && !isRuntimeSuggestionRule(r.code)" class="qr-edit-block">
+                  <b>改进建议：</b>
+                  <textarea v-model="r.suggestion" class="qr-suggestion-input" rows="2" placeholder="留空则使用默认建议"></textarea>
+                </div>
+                <div v-else-if="r.suggestion"><b>改进建议：</b>{{ r.suggestion }}</div>
+                <div v-if="qualityRulesEditMode && r.pattern != null" class="qr-edit-block">
+                  <b>命中正则：</b>
+                  <input type="text" v-model="r.pattern" class="qr-pattern-input" :aria-label="r.code + ' 命中正则'">
+                </div>
+                <div v-else-if="r.pattern != null"><b>命中正则：</b><code class="qr-pattern-code">{{ r.pattern }}</code></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 会话记录 -->
+    <div v-show="tab === 'quality' && canViewConversations && (qualitySubTab === 'conv' || !canManageQuality)" class="card">
+      <h2>真实会话</h2>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div class="stat"><div class="stat-num">{{ convTotal }}</div><div class="stat-label">当前筛选会话数</div></div>
+      </div>
+      <div class="form-row">
+        <input type="text" class="search-box" v-model="convKeyword" aria-label="按关键词搜索会话" placeholder="关键词（匹配消息内容）" @keydown.enter="loadConvs">
+        <button class="btn btn-plain" @click="convDays=''; loadConvs()">全部</button>
+        <button class="btn btn-plain" @click="convDays=7; loadConvs()">近7天</button>
+        <button class="btn btn-plain" @click="convDays=30; loadConvs()">近30天</button>
+        <button class="btn btn-primary" @click="loadConvs">查询</button>
+      </div>
+      <div class="conv-clear" v-if="role === 'super_admin'">
+        <button class="btn btn-danger" :disabled="convClearing" @click="clearAllConvs">{{ convClearing ? '清空中…' : '清空所有记录' }}</button>
+        <span class="muted">永久删除全部会话及其消息（不可恢复，需超级管理员密码）</span>
+      </div>
+      <div class="conv-batch" v-if="convSelected.length && canDeleteConversation">
+        <span class="muted">已选 {{ convSelected.length }} 个会话</span>
+        <button class="btn btn-danger" :disabled="convDeleting" @click="deleteSelectedConvs">{{ convDeleting ? '删除中…' : '批量删除选中' }}</button>
+        <button class="btn btn-plain" @click="convSelected = []">取消选择</button>
+      </div>
+      <table>
+        <tr><th scope="col" class="col-check"><input type="checkbox" :checked="convAllSelected" @change="toggleConvAll($event.target.checked)" aria-label="全选本页会话"></th><th scope="col">用户ID</th><th scope="col">首条问题</th><th scope="col">最后活跃</th><th scope="col">消息数</th><th scope="col">操作</th></tr>
+        <tr v-if="convs.length === 0"><td colspan="6" class="empty-row">暂无记录</td></tr>
+        <tr v-for="c in convs" :key="c.conversation_id">
+          <td class="col-check"><input type="checkbox" :value="c.conversation_id" v-model="convSelected" :aria-label="'选择会话 ' + c.conversation_id"></td>
+          <td class="muted ellipsis" :title="c.user_id">{{ c.user_id }}</td>
+          <td class="ellipsis-wide" :title="c.first_question">{{ c.first_question }}</td>
+          <td class="muted">{{ formatDateTime(c.update_time) }}</td>
+          <td>{{ c.message_count }}</td>
+          <td><button class="btn btn-plain" @click="viewConv(c)">查看</button><button v-if="canDeleteConversation" class="btn btn-danger" @click="deleteConv(c)">删除</button></td>
+        </tr>
+      </table>
+      <div class="pager">
+        <button class="btn btn-plain" :disabled="convPage <= 1" @click="loadConvs(convPage - 1)">上一页</button>
+        <span class="muted">第 {{ convPage }} / {{ totalConvPages }} 页 · 共 {{ convTotal }} 条</span>
+        <button class="btn btn-plain" :disabled="convPage >= totalConvPages" @click="loadConvs(convPage + 1)">下一页</button>
+        <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.conv" min="1" :max="totalConvPages" @keyup.enter="gotoPage('conv','convPage','totalConvPages')"> 页<button class="btn btn-plain" @click="gotoPage('conv','convPage','totalConvPages')">前往</button></span>
+      </div>
+    </div>
+
+    <!-- 会话详情浮层：点"查看"即居中弹窗，不用滚动到页面底部 -->
+    <div v-if="convDetailOpen" class="kb-mask" @click.self="convDetailOpen = false">
+      <div class="kb-modal" role="dialog" aria-modal="true" aria-label="会话详情">
+        <div class="kb-modal-head">
+          <h2>会话详情 · {{ (convDetail || []).length }} 条消息</h2>
+          <button class="btn btn-plain" @click="convDetailOpen = false">✕ 关闭</button>
+        </div>
+        <div class="kb-modal-body">
+          <div v-for="(m, i) in pagedConvDetail" :key="i" class="msg-pair">
+            <div :class="m.role === 'user' ? 'q' : 'a'">{{ roleIcon(m.role) }}{{ m.content }}<span class="muted" v-if="m.create_time">（{{ formatShortDateTime(m.create_time) }}）</span><span v-if="m.legacyRisk" class="chip chip-offline" title="这条旧消息包含可能过度承诺的表达，系统不会修改历史原文">历史风险话术</span><details v-if="decisionTraceOf(m)" class="quality-trace"><summary>查看本轮决策追踪</summary><pre>{{ formatDecisionTrace(decisionTraceOf(m)) }}</pre></details></div>
+          </div>
+          <div v-if="totalConvDetailPages > 1" class="pager">
+            <button class="btn btn-plain" :disabled="convDetailPage <= 1" @click="convDetailPage--">上一页</button>
+            <span class="muted">第 {{ convDetailPage }} / {{ totalConvDetailPages }} 页 · 共 {{ convDetail.length }} 条</span>
+            <button class="btn btn-plain" :disabled="convDetailPage >= totalConvDetailPages" @click="convDetailPage++">下一页</button>
+            <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.convDetail" min="1" :max="totalConvDetailPages" @keyup.enter="gotoPage('convDetail','convDetailPage','totalConvDetailPages')"> 页<button class="btn btn-plain" @click="gotoPage('convDetail','convDetailPage','totalConvDetailPages')">前往</button></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 操作日志（W26-M6：审计可查） -->
+    <div v-show="tab === 'agents'">
+      <div style="margin:0 0 14px;padding:10px 14px;border:1px solid rgba(240,180,41,.35);background:rgba(240,180,41,.12);border-radius:10px;font-size:13.5px;">
+        <b>已封存：</b>人工接待已迁移至<b>企业微信原生接待</b>——接待成员请在企业微信后台的「微信客服」应用中管理，
+        转人工由企微按接待规则自动分配。本页坐席账号已停用（历史数据保留查看），网页渠道仅保留 AI 自助答疑。
+      </div>
+      <div class="card">
+        <h2>新增客服账号（已停用）</h2>
+        <div class="account-form">
+          <label class="account-field"><span>登录账号</span><input v-model.trim="newAgent.username" autocomplete="off" placeholder="如 service01"></label>
+          <label class="account-field"><span>显示名称</span><input v-model.trim="newAgent.name" autocomplete="off" placeholder="如 客服小王"></label>
+          <label class="account-field"><span>初始密码</span><input v-model="newAgent.password" type="password" autocomplete="new-password" placeholder="至少 8 位"></label>
+          <label class="account-field"><span>重复初始密码</span><input v-model="newAgent.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码"></label>
+        </div>
+        <div class="permission-section">
+          <h3>企业服务范围</h3>
+          <div class="permission-grid">
+            <label v-for="tenant in resourceScopeCatalog.tenants" :key="'new-agent-t-' + tenant.id" class="permission-option"><input type="checkbox" :value="Number(tenant.id)" v-model="newAgent.tenantIds" @change="pruneAgentKfScope(newAgent)"><span><b>{{ tenant.name }}</b><small>{{ tenant.code }}{{ tenant.enabled ? '' : ' · 已停用' }}</small></span></label>
+          </div>
+          <h3 v-if="newAgent.tenantIds.length">限定客服号（可选）</h3>
+          <div v-if="newAgent.tenantIds.length" class="permission-grid">
+            <label v-for="kf in agentScopeAccountsFor(newAgent.tenantIds)" :key="'new-agent-k-' + kf.id" class="permission-option"><input type="checkbox" :value="Number(kf.id)" v-model="newAgent.kfAccountIds"><span><b>{{ kf.name }}</b><small>{{ kf.openKfid }}</small></span></label>
+          </div>
+        </div>
+        <p v-if="newAgent.confirmPassword && newAgent.password !== newAgent.confirmPassword" class="password-warning">两次输入的密码不一致</p>
+        <button class="btn btn-primary" :disabled="true"
+                title="坐席工作台已封存：人工接待已迁移至企业微信原生接待">
+          已停用（工作台封存）
+        </button>
+      </div>
+      <div class="card">
+        <h2>客服账号（共 {{ agentTotal }} 个）</h2>
+        <table>
+          <tr><th>账号</th><th>显示名称</th><th>服务范围</th><th>在线状态</th><th>账号状态</th><th>操作</th></tr>
+          <tr v-if="!agents.length"><td colspan="6" class="empty-row">暂无客服账号</td></tr>
+          <tr v-for="agent in agents" :key="agent.id">
+            <td>{{ agent.username }}</td><td>{{ agent.name }}</td>
+            <td><span class="muted">{{ agentScopeLabel(agent) }}</span></td>
+            <td><span class="chip" :class="agent.status === 'online' ? 'chip-online' : 'chip-offline'">{{ agent.status === 'online' ? '在线' : '离线' }}</span></td>
+            <td>{{ agent.enabled === false ? '已停用' : '已启用' }}</td>
+            <td><button class="btn btn-plain" @click="openAgentScope(agent)">服务范围</button> <button class="btn btn-plain" @click="openAgentPassword(agent)">重置密码</button></td>
+          </tr>
+        </table>
+        <div v-if="totalAgentPages > 1" class="pager">
+          <button class="btn btn-plain" :disabled="agentPage <= 1" @click="loadAgents(agentPage - 1)">上一页</button>
+          <span class="muted">第 {{ agentPage }} / {{ totalAgentPages }} 页 · 共 {{ agentTotal }} 个账号</span>
+          <button class="btn btn-plain" :disabled="agentPage >= totalAgentPages" @click="loadAgents(agentPage + 1)">下一页</button>
+        </div>
+      </div>
+      <div v-if="agentPasswordTarget" class="kb-mask" @click.self="closeAgentPassword">
+        <div class="kb-modal" style="max-width:520px" role="dialog" aria-modal="true" aria-label="重置客服密码">
+          <div class="kb-modal-head"><h2>重置 @{{ agentPasswordTarget.username }} 的密码</h2><button class="btn btn-plain" @click="closeAgentPassword">关闭</button></div>
+          <div class="kb-modal-body">
+            <div class="account-form" style="grid-template-columns:1fr">
+              <label class="account-field"><span>新密码</span><input v-model="agentPassword.password" type="password" autocomplete="new-password" placeholder="至少 8 位"></label>
+              <label class="account-field"><span>重复新密码</span><input v-model="agentPassword.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码"></label>
+            </div>
+            <button class="btn btn-primary" @click="resetAgentPassword">确认重置</button>
+          </div>
+        </div>
+      </div>
+      <div v-if="agentScopeTarget" class="kb-mask" @click.self="closeAgentScope">
+        <div class="kb-modal" style="max-width:760px" role="dialog" aria-modal="true" aria-label="设置客服服务范围">
+          <div class="kb-modal-head"><h2>设置 @{{ agentScopeTarget.username }} 的服务范围</h2><button class="btn btn-plain" @click="closeAgentScope">关闭</button></div>
+          <div class="kb-modal-body">
+            <div class="permission-grid">
+              <label v-for="tenant in resourceScopeCatalog.tenants" :key="'agent-scope-t-' + tenant.id" class="permission-option"><input type="checkbox" :value="Number(tenant.id)" v-model="agentScopeTarget.tenantIds" @change="pruneAgentKfScope(agentScopeTarget)"><span><b>{{ tenant.name }}</b><small>{{ tenant.code }}</small></span></label>
+            </div>
+            <h3 v-if="agentScopeTarget.tenantIds.length">限定客服号（不选表示所选企业下全部客服号）</h3>
+            <div v-if="agentScopeTarget.tenantIds.length" class="permission-grid">
+              <label v-for="kf in agentScopeAccountsFor(agentScopeTarget.tenantIds)" :key="'agent-scope-k-' + kf.id" class="permission-option"><input type="checkbox" :value="Number(kf.id)" v-model="agentScopeTarget.kfAccountIds"><span><b>{{ kf.name }}</b><small>{{ kf.openKfid }}</small></span></label>
+            </div>
+            <div class="quality-actions" style="justify-content:flex-start;margin-top:14px"><button class="btn btn-primary" @click="saveAgentScope">保存服务范围</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-show="tab === 'operations'">
+      <div class="card scope-note"><span class="scope-note-mark">队</span><div><strong>统一客户运营队列</strong></div></div>
+      <div class="card">
+        <h2>预约登记（共 {{ appointmentTotal }} 条）</h2>
+        <div class="form-row"><select v-model="appointmentStatus" @change="loadAppointments(1)"><option value="">全部状态</option><option value="new">待联系</option><option value="contacted">已联系</option><option value="closed">已完成</option><option value="cancelled">已取消</option></select><button class="btn btn-plain" @click="loadAppointments(appointmentPage)">刷新</button></div>
+        <table><tr><th>客户</th><th>电话</th><th>项目/城市</th><th>登记时间</th><th>状态</th><th>操作</th></tr>
+          <tr v-if="!appointments.length"><td colspan="6" class="empty-row">暂无预约</td></tr>
+          <tr v-for="row in appointments" :key="row.id"><td>{{ row.name || '未填写' }}</td><td>{{ row.phone || '—' }}</td><td class="ellipsis-wide" :title="[row.project,row.city].filter(Boolean).join(' · ')">{{ [row.project,row.city].filter(Boolean).join(' · ') || '—' }}</td><td class="muted">{{ formatDateTime(row.create_time) }}</td><td>{{ operationStatusName(row.status) }}</td><td><button v-if="row.status==='new'" class="btn btn-primary" @click="updateOperation('appointments', row.id, 'contacted', 'appointment')">标记已联系</button><button v-if="row.status!=='closed' && row.status!=='cancelled'" class="btn btn-plain" @click="updateOperation('appointments', row.id, 'closed', 'appointment')">完成</button></td></tr>
+        </table>
+        <div v-if="totalAppointmentPages > 1" class="pager"><button class="btn btn-plain" :disabled="appointmentPage<=1" @click="loadAppointments(appointmentPage-1)">上一页</button><span class="muted">第 {{ appointmentPage }} / {{ totalAppointmentPages }} 页 · 共 {{ appointmentTotal }} 条</span><button class="btn btn-plain" :disabled="appointmentPage>=totalAppointmentPages" @click="loadAppointments(appointmentPage+1)">下一页</button></div>
+      </div>
+      <div class="card">
+        <h2>唤醒任务（共 {{ wakeupTotal }} 条）<span class="chip chip-offline" title="wakeup.enabled 当前为 false">未启用 · 企微触达通道决策中</span></h2>
+        <p class="muted" style="margin:0 0 8px;font-size:12px">扫描已关闭，仅显示历史测试数据。</p>
+        <div class="form-row"><select v-model="wakeupStatus" @change="loadWakeups(1)"><option value="">全部状态</option><option value="new">待处理</option><option value="delivered">已送达</option><option value="contacted">已联系</option><option value="closed">已关闭</option></select><button class="btn btn-plain" @click="loadWakeups(wakeupPage)">刷新</button></div>
+        <table><tr><th>用户</th><th>建议话术</th><th>最后活跃</th><th>状态</th><th>操作</th></tr><tr v-if="!wakeups.length"><td colspan="5" class="empty-row">暂无唤醒任务</td></tr><tr v-for="row in wakeups" :key="row.id"><td class="ellipsis" :title="row.user_id">{{ row.user_id }}</td><td class="ellipsis-wide" :title="row.script">{{ row.script }}</td><td class="muted">{{ formatDateTime(row.last_active) }}</td><td>{{ operationStatusName(row.status) }}</td><td><button v-if="row.status!=='contacted'" class="btn btn-primary" @click="updateOperation('wakeup', row.id, 'contacted', 'wakeup')">标记已联系</button><button v-if="row.status!=='closed'" class="btn btn-plain" @click="updateOperation('wakeup', row.id, 'closed', 'wakeup')">关闭</button></td></tr></table>
+        <div v-if="totalWakeupPages > 1" class="pager"><button class="btn btn-plain" :disabled="wakeupPage<=1" @click="loadWakeups(wakeupPage-1)">上一页</button><span class="muted">第 {{ wakeupPage }} / {{ totalWakeupPages }} 页 · 共 {{ wakeupTotal }} 条</span><button class="btn btn-plain" :disabled="wakeupPage>=totalWakeupPages" @click="loadWakeups(wakeupPage+1)">下一页</button></div>
+      </div>
+
+      <!-- P2-11 批量唤醒：圈人 + 批量生成回访任务 -->
+      <div class="card">
+        <h2>批量唤醒</h2>
+        <p class="muted" style="margin:0 0 8px;font-size:12px">按项目圈出最近 90 天咨询过、且已沉默指定天数的网页客户，批量生成回访任务（人工电话/微信送达）。同一客户 {{ wakeupCooldownDays }} 天内不会重复生成，已有待办任务的客户自动跳过。</p>
+        <div class="form-row">
+          <input type="text" v-model="batchWakeup.project" aria-label="项目名" placeholder="项目名，如：眼袋、抗衰（自动扩展别名）">
+          <select v-model.number="batchWakeup.inactiveDays" aria-label="沉默天数">
+            <option :value="3">沉默 3 天以上</option>
+            <option :value="7">沉默 7 天以上</option>
+            <option :value="14">沉默 14 天以上</option>
+            <option :value="30">沉默 30 天以上</option>
+          </select>
+          <button class="btn btn-primary" :disabled="batchWakeupLoading" @click="loadWakeupCandidates">{{ batchWakeupLoading ? '圈人中…' : '圈人预览' }}</button>
+        </div>
+        <table v-if="batchWakeupRows.length">
+          <tr><th style="width:32px"><input type="checkbox" aria-label="全选" :checked="batchWakeupSelected.length === batchWakeupRows.length" @change="toggleAllWakeupCandidates($event)"></th><th>客户</th><th>首问</th><th>最后活跃</th></tr>
+          <tr v-for="c in batchWakeupRows" :key="c.user_id">
+            <td><input type="checkbox" :value="c.user_id" v-model="batchWakeupSelected" aria-label="选择该客户"></td>
+            <td class="ellipsis" :title="c.user_id">{{ c.user_id }}</td>
+            <td class="ellipsis-wide" :title="c.first_question">{{ c.first_question || '—' }}</td>
+            <td class="muted">{{ formatDateTime(c.last_active) }}</td>
+          </tr>
+        </table>
+        <div v-else-if="batchWakeupSearched" class="muted" style="padding:8px 0">没有符合条件的客户（可能都在冷却期内或已有待办任务）</div>
+        <div class="form-row" v-if="batchWakeupSelected.length" style="flex-direction:column;align-items:stretch">
+          <label style="font-size:13px;color:var(--muted)">回访话术（留空使用通用模板，人工送达时参考）</label>
+          <textarea v-model="batchWakeup.script" rows="3" maxlength="2000" placeholder="例如：您好，好久不见～近期咱们之前聊到的项目有优惠活动，方便的话来店免费咨询看看～"></textarea>
+        </div>
+        <div class="form-row" v-if="batchWakeupSelected.length">
+          <button class="btn btn-primary" :disabled="batchWakeupSubmitting" @click="createBatchWakeup">{{ batchWakeupSubmitting ? '生成中…' : '为选中的 ' + batchWakeupSelected.length + ' 位客户生成唤醒任务' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-show="tab === 'audit'" class="card">
+      <h2>操作日志（共 {{ auditTotal }} 条）</h2>
+      <div class="form-row">
+        <input type="search" v-model="auditFilter.action" aria-label="操作关键字" placeholder="操作/对象关键字，如：删除、评分、价格">
+        <input type="search" v-model="auditFilter.operator" aria-label="操作人" placeholder="操作人">
+        <label>开始 <input type="date" v-model="auditFilter.from"></label>
+        <label>结束 <input type="date" v-model="auditFilter.to"></label>
+        <button class="btn btn-primary" @click="loadAudit(1)">筛选</button>
+        <button class="btn btn-plain" @click="resetAuditFilter">重置</button>
+        <button class="btn btn-plain" @click="loadAudit(auditPage)">刷新</button>
+      </div>
+      <div class="form-row">
+        <span class="muted">记录管理端/坐席的删除、改密、新增等关键操作；可按操作、操作人和时间范围追溯历史</span>
+      </div>
+      <table>
+        <tr><th scope="col">时间</th><th scope="col">操作</th><th scope="col">对象</th><th scope="col">操作人</th></tr>
+        <tr v-if="audits.length === 0"><td colspan="4" class="empty-row">暂无记录</td></tr>
+        <tr v-for="a in audits" :key="a.id">
+          <td class="muted">{{ formatDateTime(a.create_time) }}</td>
+          <td><span class="chip" :class="auditChipClass(a.action)">{{ auditActionName(a.action) }}</span></td>
+          <td class="ellipsis-wide" :title="a.object">{{ a.object }}</td>
+          <td>{{ a.operator }}</td>
+        </tr>
+      </table>
+      <div v-if="totalAuditServerPages > 1" class="pager">
+        <button class="btn btn-plain" :disabled="auditPage <= 1" @click="loadAudit(auditPage - 1)">上一页</button>
+        <span class="muted">第 {{ auditPage }} / {{ totalAuditServerPages }} 页 · 共 {{ auditTotal }} 条</span>
+        <button class="btn btn-plain" :disabled="auditPage >= totalAuditServerPages" @click="loadAudit(auditPage + 1)">下一页</button>
+        <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.audit" min="1" :max="totalAuditServerPages" @keyup.enter="gotoPage('audit','auditPage','totalAuditServerPages')"> 页<button class="btn btn-plain" @click="gotoPage('audit','auditPage','totalAuditServerPages')">前往</button></span>
+      </div>
+    </div>
+
+    <!-- 超级管理员：管理员账号、密码与权限分配 -->
+    <div v-if="role === 'super_admin' && tab === 'admins'">
+      <div class="card">
+        <div class="tenant-head">
+          <div>
+            <h2>网站管理员</h2>
+          </div>
+          <div class="tenant-actions">
+            <button class="btn btn-primary" @click="adminDialog = true">＋ 新增管理员</button>
+          </div>
+        </div>
+        <div v-if="!adminAccounts.length" class="empty-row" style="margin-top:14px">暂无网站管理员，请先创建管理员账号。</div>
+      </div>
+
+      <!-- 新增管理员弹窗 -->
+      <div v-if="adminDialog" class="kb-mask" @click.self="adminDialog = false">
+        <div class="kb-modal admin-modal" role="dialog" aria-modal="true" aria-label="新增网站管理员">
+          <div class="kb-modal-head">
+            <h2>新增网站管理员</h2>
+            <button class="btn btn-plain" @click="adminDialog = false">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div class="account-form">
+              <label class="account-field"><span>登录账号</span><input v-model="newAdmin.username" autocomplete="off" placeholder="如 editor"></label>
+              <label class="account-field"><span>显示名称</span><input v-model="newAdmin.name" autocomplete="off" placeholder="如 内容编辑"></label>
+              <label class="account-field"><span>初始密码</span><input v-model="newAdmin.password" type="password" autocomplete="new-password" placeholder="至少 8 位"></label>
+              <label class="account-field"><span>重复初始密码</span><input v-model="newAdmin.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码"></label>
+            </div>
+            <p v-if="newAdmin.confirmPassword && newAdmin.password !== newAdmin.confirmPassword" class="password-warning">两次输入的密码不一致</p>
+            <h3 style="margin:14px 0 6px;font-size:14px">功能权限</h3>
+            <div class="permission-grid">
+              <label v-for="p in permissionDefinitions" :key="'new-' + p.code" class="permission-option">
+                <input type="checkbox" :value="p.code" v-model="newAdmin.permissions">
+                <span><b>{{ p.label }}</b><small>{{ p.description }}</small></span>
+              </label>
+            </div>
+            <h3 style="margin:14px 0 6px;font-size:14px">企微数据范围</h3>
+            <div class="permission-grid">
+              <label v-for="tenant in adminScopeCatalog.tenants" :key="'new-scope-t-' + tenant.id" class="permission-option"><input type="checkbox" :value="tenant.id" v-model="newAdmin.tenantIds"><span><b>{{ tenant.name }}</b><small>{{ tenant.code }}{{ tenant.enabled ? '' : ' · 已停用' }}</small></span></label>
+            </div>
+            <div v-if="newAdmin.tenantIds.length" class="permission-grid">
+              <label v-for="kf in scopeAccountsFor(newAdmin.tenantIds)" :key="'new-scope-k-' + kf.id" class="permission-option"><input type="checkbox" :value="kf.id" v-model="newAdmin.kfAccountIds"><span><b>{{ kf.name }}</b><small>{{ kf.openKfid }}</small></span></label>
+            </div>
+            <div class="admin-account-actions" style="margin-top:8px">
+              <button class="btn btn-primary" :disabled="newAdmin.confirmPassword && newAdmin.password !== newAdmin.confirmPassword" @click="createAdminAccount">创建管理员</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-for="account in pagedAdminAccounts" :key="account.id" class="card">
+        <div class="admin-account-head" style="align-items:center;">
+          <div>
+            <h2 style="margin-bottom:4px">{{ account.name }} <span class="muted">@{{ account.username }}</span></h2>
+            <span class="ai-status" :class="account.enabled ? 'matched' : 'failed'">{{ account.enabled ? '已启用' : '已停用' }}</span>
+            <span class="chip" :class="account.role === 'super_admin' ? 'chip-done' : ''">{{ account.role === 'super_admin' ? '超级管理员' : '管理员' }}</span>
+          </div>
+          <div class="tenant-actions">
+            <button class="btn btn-primary" @click="openAdminEditDialog(account)">编辑</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 编辑管理员弹窗 -->
+      <div v-if="editAdminDialog.open && editingAdminAccount" class="kb-mask" @click.self="editAdminDialog.open = false">
+        <div class="kb-modal admin-modal" role="dialog" aria-modal="true" :aria-label="'编辑管理员 ' + editingAdminAccount.username">
+          <div class="kb-modal-head">
+            <h2>编辑管理员 · {{ editingAdminAccount.name }} <span class="muted">@{{ editingAdminAccount.username }}</span></h2>
+            <button class="btn btn-plain" @click="editAdminDialog.open = false">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div class="account-form">
+              <label class="account-field"><span>登录账号</span><input v-model="editingAdminAccount.editUsername" autocomplete="off"></label>
+              <label class="account-field"><span>显示名称</span><input v-model="editingAdminAccount.editName" autocomplete="off"></label>
+            </div>
+            <div class="admin-account-actions">
+              <button class="btn btn-primary" @click="saveAdminProfile(editingAdminAccount)">保存账号资料</button>
+            </div>
+            <hr style="margin:16px 0;border:0;border-top:1px solid var(--line);">
+            <div class="account-form">
+              <label class="account-field"><span>新密码</span><input v-model="editingAdminAccount.newPassword" type="password" autocomplete="new-password" placeholder="至少 8 位"></label>
+              <label class="account-field"><span>重复新密码</span><input v-model="editingAdminAccount.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入新密码"></label>
+            </div>
+            <p v-if="editingAdminAccount.confirmPassword && editingAdminAccount.newPassword !== editingAdminAccount.confirmPassword" class="password-warning">两次输入的密码不一致</p>
+            <div class="admin-account-actions">
+              <button class="btn btn-plain" :disabled="!editingAdminAccount.newPassword || !editingAdminAccount.confirmPassword" @click="resetAdminAccountPassword(editingAdminAccount)">修改密码</button>
+            </div>
+            <hr style="margin:16px 0;border:0;border-top:1px solid var(--line);">
+            <template v-if="editingAdminAccount.role === 'super_admin'">
+              <p class="muted">超级管理员固定拥有全部后台权限，不能停用、降级或修改权限；仅可修改本账号的登录账号、显示名称和密码。</p>
+            </template>
+            <template v-else>
+              <h3 style="margin:0 0 6px;font-size:14px">功能权限</h3>
+              <div class="permission-grid">
+                <label v-for="p in permissionDefinitions" :key="editingAdminAccount.id + '-' + p.code" class="permission-option">
+                  <input type="checkbox" :value="p.code" v-model="editingAdminAccount.permissions">
+                  <span><b>{{ p.label }}</b><small>{{ p.description }}</small></span>
+                </label>
+              </div>
+              <h3 style="margin:14px 0 6px;font-size:14px">企微数据范围</h3>
+              <p class="muted">客服号不选表示可查看所选企业的全部客服号。</p>
+              <div class="permission-grid">
+                <label v-for="tenant in adminScopeCatalog.tenants" :key="editingAdminAccount.id + '-scope-t-' + tenant.id" class="permission-option"><input type="checkbox" :value="tenant.id" v-model="editingAdminAccount.tenantIds" @change="pruneAdminKfScope(editingAdminAccount)"><span><b>{{ tenant.name }}</b><small>{{ tenant.code }}</small></span></label>
+              </div>
+              <div v-if="editingAdminAccount.tenantIds.length" class="permission-grid">
+                <label v-for="kf in scopeAccountsFor(editingAdminAccount.tenantIds)" :key="editingAdminAccount.id + '-scope-k-' + kf.id" class="permission-option"><input type="checkbox" :value="kf.id" v-model="editingAdminAccount.kfAccountIds"><span><b>{{ kf.name }}</b><small>{{ kf.openKfid }}</small></span></label>
+              </div>
+              <div class="admin-account-actions">
+                <button class="btn btn-primary" @click="saveAdminPermissions(editingAdminAccount)">保存权限</button>
+                <button class="btn btn-primary" @click="saveAdminDataScope(editingAdminAccount)">保存数据范围</button>
+                <button class="btn" :class="editingAdminAccount.enabled ? 'btn-danger' : 'btn-plain'" @click="toggleAdminAccount(editingAdminAccount)">{{ editingAdminAccount.enabled ? '停用账号' : '启用账号' }}</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="totalAdminPages > 1" class="card pager">
+        <button class="btn btn-plain" :disabled="adminPage <= 1" @click="adminPage--">上一页</button>
+        <span class="muted">第 {{ adminPage }} / {{ totalAdminPages }} 页 · 共 {{ adminAccounts.length }} 个账号</span>
+        <button class="btn btn-plain" :disabled="adminPage >= totalAdminPages" @click="adminPage++">下一页</button>
+        <span class="page-jump">跳至 <input type="number" class="page-jump-input" v-model.number="jump.admin" min="1" :max="totalAdminPages" @keyup.enter="gotoPage('admin','adminPage','totalAdminPages')"> 页<button class="btn btn-plain" @click="gotoPage('admin','adminPage','totalAdminPages')">前往</button></span>
+      </div>
+    </div>
+
+    <!-- 超级管理员：多企业、多微信客服号 -->
+    <div v-if="role === 'super_admin' && tab === 'wecom'" class="tenant-grid">
+      <div class="card tenant-card">
+        <div class="tenant-head">
+          <div>
+            <h2>企业微信接入</h2>
+          </div>
+          <div class="tenant-actions">
+            <button class="btn btn-primary" @click="openWeComTenantDialog">＋ 新增接入企业</button>
+          </div>
+        </div>
+        <div class="wecom-mode-banner">
+          <span class="wecom-mode-icon">企</span>
+          <div><strong>仅支持企业微信接管的微信客服 API 模式</strong><p>独立版微信客服凭证不能用于此处。</p></div>
+          <div class="wecom-mode-links"><a class="btn btn-plain" href="/interface-help.html#wecom" target="_blank" rel="noopener noreferrer">查看接入指南 ↗</a></div>
+        </div>
+        <div v-if="!wecomTenants.length" class="empty-row" style="margin-top:14px">暂无接入企业</div>
+      </div>
+
+      <!-- 新增企微企业弹窗 -->
+      <div v-if="wecomTenantDialog" class="kb-mask" @click.self="wecomTenantDialog = false">
+        <div class="kb-modal tenant-modal" role="dialog" aria-modal="true" aria-label="新增企业微信接入">
+          <div class="kb-modal-head">
+            <h2>新增企业微信接入</h2>
+            <button class="btn btn-plain" @click="wecomTenantDialog = false">✕ 关闭</button>
+          </div>
+          <div class="kb-modal-body">
+            <div class="wecom-wizard-steps" aria-label="新增企业步骤">
+              <div class="wecom-wizard-step" :class="{active:newTenantStep===1,done:newTenantStep>1}"><b>{{ newTenantStep > 1 ? '✓' : '1' }}</b><span>企业信息</span></div>
+              <div class="wecom-wizard-step" :class="{active:newTenantStep===2,done:newTenantStep>2}"><b>{{ newTenantStep > 2 ? '✓' : '2' }}</b><span>接口应用</span></div>
+              <div class="wecom-wizard-step" :class="{active:newTenantStep===3}"><b>3</b><span>消息回调</span></div>
+            </div>
+            <div v-if="newTenantStep === 1" class="wecom-wizard-panel">
+              <h3 class="wecom-wizard-title">确认企业身份</h3>
+              <div class="tenant-form" style="margin-top:12px">
+                <label class="account-field"><span class="wecom-field-label">企业编码 <span class="wecom-help" tabindex="0" data-tip="系统内部唯一标识，将成为回调 URL 的最后一段。创建后不可修改，建议使用品牌或地区的英文缩写。">?</span></span><input v-model.trim="newTenant.code" maxlength="50" placeholder="如 brand-shanghai"><small>3-50 位小写字母、数字或短横线，首尾不能是短横线</small></label>
+                <label class="account-field"><span class="wecom-field-label">企业名称 <span class="wecom-help" tabindex="0" data-tip="仅用于管理后台展示，建议填写能区分主体或分公司的名称。">?</span></span><input v-model.trim="newTenant.name" maxlength="100" placeholder="如 上海分公司"></label>
+                <label class="account-field"><span class="wecom-field-label">企业 ID（CorpID） <span class="wecom-help" tabindex="0" data-tip="获取路径：企业微信管理后台 → 我的企业 → 企业信息 → 企业 ID。通常以 ww 开头。">?</span></span><input v-model.trim="newTenant.corpId" maxlength="128" placeholder="ww..." autocomplete="off"><small>企业微信后台 → 我的企业 → 企业信息</small></label>
+              </div>
+            </div>
+            <div v-else-if="newTenantStep === 2" class="wecom-wizard-panel">
+              <h3 class="wecom-wizard-title">配置接口调用应用</h3>
+              <div class="tenant-form" style="margin-top:12px">
+                <label class="account-field full"><span class="wecom-field-label">接口调用应用 Secret <span class="wecom-help" tabindex="0" data-tip="先在应用管理中选择一个企业内部自建应用，再到微信客服的“可调用接口的应用”中授权该应用。这里填写这个自建应用的 Secret，不是微信客服独立版凭证。">?</span></span><input v-model.trim="newTenant.secret" type="password" autocomplete="new-password" placeholder="填写已获微信客服接口权限的自建应用 Secret"><small>应用管理 → 自建应用 → Secret；并确认该应用已获得微信客服接口权限</small></label>
+              </div>
+              <a class="btn btn-plain" href="https://work.weixin.qq.com/wework_admin/frame" target="_blank" rel="noopener noreferrer">前往企微后台配置 ↗</a>
+            </div>
+            <div v-else class="wecom-wizard-panel">
+              <h3 class="wecom-wizard-title">配置接收消息</h3>
+              <div class="wecom-preview"><span>回调 URL 预览（正式部署时应为公网 HTTPS 域名）</span><code>{{ newTenantCallbackPreview() }}</code></div>
+              <div class="tenant-form">
+                <label class="account-field"><span class="wecom-field-label">回调 Token <span class="wecom-help" tabindex="0" data-tip="由你在企微的接收消息配置中自定义，用于校验回调签名。企微后台与本系统必须逐字一致；它不是 access_token。">?</span></span><input v-model.trim="newTenant.callbackToken" type="password" maxlength="500" autocomplete="new-password" placeholder="与企微后台一致"></label>
+                <label class="account-field"><span class="wecom-field-label">EncodingAESKey <span class="wecom-help" tabindex="0" data-tip="消息加解密密钥，通常可在企微接收消息配置中随机生成。必须是 43 位字母、数字、下划线或短横线，企微后台与本系统必须一致。">?</span></span><input v-model.trim="newTenant.aesKey" type="password" maxlength="43" autocomplete="new-password" placeholder="必须为 43 位"><small>当前 {{ (newTenant.aesKey || '').length }}/43 位</small></label>
+              </div>
+              <label class="switch-field"><span class="switch"><input type="checkbox" v-model="newTenant.enabled"><span class="slider"></span></span><span class="switch-text">创建后启用</span></label>
+            </div>
+            <div class="admin-account-actions" style="margin-top:14px;justify-content:space-between">
+              <button v-if="newTenantStep > 1" class="btn btn-plain" @click="newTenantStep--">上一步</button><span v-else></span>
+              <button v-if="newTenantStep < 3" class="btn btn-primary" @click="nextWeComTenantStep">下一步</button>
+              <button v-else class="btn btn-primary" :disabled="wecomSaving" @click="createWeComTenant">{{ wecomSaving ? '创建中…' : '创建企业' }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-for="tenant in wecomTenants" :key="tenant.id" class="card tenant-card">
+        <div class="tenant-head">
+          <div><div class="tenant-title"><h2>{{ tenant.name }}</h2><span class="tenant-code">{{ tenant.code }}</span><span class="ai-status" :class="tenant.enabled ? 'matched' : 'failed'">{{ tenant.enabled ? '已启用' : '已停用' }}</span></div><p class="muted" style="margin-top:5px">CorpID：{{ tenant.corpId }} · {{ (tenant.accounts || []).length }} 个客服号</p></div>
+          <div class="tenant-actions"><button class="btn btn-plain" @click="copyTenantCallback(tenant)">复制回调地址</button><button class="btn btn-primary" :disabled="tenant.checking" @click="diagnoseTenant(tenant)">{{ tenant.checking ? '正在检查…' : '一键检查接入状态' }}</button><button class="btn btn-danger" @click="deleteWeComTenant(tenant)">删除企业</button></div>
+        </div>
+        <div class="wecom-progress" aria-label="企业接入进度"><div v-for="step in wecomAccessSteps(tenant)" :key="step.number" class="wecom-progress-step" :class="{done:step.done,current:step.current}"><span>{{ step.done ? '✓' : step.number }} {{ step.label }}</span><small>{{ step.detail }}</small></div></div>
+        <div class="wecom-callback"><code :title="tenant.callbackUrl">{{ tenant.callbackUrl }}</code></div>
+        <div class="secret-state"><span :class="{ready:tenant.secretConfigured}">Secret {{ tenant.secretConfigured ? '已配置' : '未配置' }}</span><span :class="{ready:tenant.callbackTokenConfigured}">Token {{ tenant.callbackTokenConfigured ? '已配置' : '未配置' }}</span><span :class="{ready:tenant.aesKeyConfigured}">AESKey {{ tenant.aesKeyConfigured ? '已配置' : '未配置' }}</span></div>
+        <details class="wecom-advanced">
+          <summary>编辑企业配置与凭证</summary>
+          <div class="wecom-advanced-body">
+            <div class="tenant-form">
+              <label class="account-field"><span>企业编码</span><input v-model="tenant.draft.code" disabled title="企业编码创建后不可修改（企微回调地址按此编码配置）"></label>
+              <label class="account-field"><span>企业名称</span><input v-model="tenant.draft.name"></label>
+              <label class="account-field"><span class="wecom-field-label">企业 ID（CorpID） <span class="wecom-help" tabindex="0" data-tip="企业微信后台 → 我的企业 → 企业信息 → 企业 ID。修改错误会导致接口鉴权和回调解密失败。">?</span></span><input v-model="tenant.draft.corpId"></label>
+              <label class="account-field"><span class="wecom-field-label">替换接口调用应用 Secret <span class="wecom-help" tabindex="0" data-tip="留空会保留现有 Secret。新值必须属于已获得微信客服接口权限的企业内部自建应用。">?</span></span><input v-model="tenant.draft.secret" type="password" autocomplete="new-password" placeholder="留空保持当前值"></label>
+              <label class="account-field"><span class="wecom-field-label">替换回调 Token <span class="wecom-help" tabindex="0" data-tip="留空会保留现有 Token；填写时必须与企微微信客服 API 的接收消息配置完全一致。">?</span></span><input v-model="tenant.draft.callbackToken" type="password" autocomplete="new-password" placeholder="留空保持当前值"></label>
+              <label class="account-field"><span class="wecom-field-label">替换 EncodingAESKey <span class="wecom-help" tabindex="0" data-tip="留空会保留现有密钥；替换值必须是企微接收消息配置中的 43 位 EncodingAESKey。">?</span></span><input v-model="tenant.draft.aesKey" type="password" maxlength="43" autocomplete="new-password" placeholder="留空保持当前值"></label>
+            </div>
+            <div class="admin-account-actions"><label class="switch-field"><span class="switch"><input type="checkbox" v-model="tenant.draft.enabled"><span class="slider"></span></span><span class="switch-text">启用企业</span></label><button class="btn btn-primary" :disabled="wecomSaving" @click="saveWeComTenant(tenant)">保存企业配置</button></div>
+          </div>
+        </details>
+
+        <div v-if="tenant.diagnostics" class="tenant-diagnostics">
+          <div class="tenant-head" style="margin:0"><div><strong>{{ tenant.diagnostics.summary }}</strong><p class="muted">不会发送客户消息；收到有效回调后才显示“已连接”。</p></div><span class="wecom-overall" :class="tenant.diagnostics.overall">{{ tenant.diagnostics.statusLabel || '待完善' }}</span></div>
+          <p class="wecom-next-action"><strong>下一步：</strong>{{ tenant.diagnostics.nextAction }}</p>
+          <div class="wecom-runtime"><div><span>本进程有效回调</span><strong>{{ tenant.diagnostics.runtime.callbacksAccepted || 0 }}</strong></div><div><span>最近有效回调</span><strong style="font-size:13px">{{ formatWeComTime(tenant.diagnostics.runtime.lastAcceptedCallbackAt) }}</strong></div><div><span>本进程收到回调</span><strong>{{ tenant.diagnostics.runtime.callbacksReceived || 0 }}</strong></div><div><span>监控开始时间</span><strong style="font-size:13px">{{ formatWeComTime(tenant.diagnostics.runtime.startedAt) }}</strong></div></div>
+          <div class="wecom-check-grid"><div v-for="check in tenant.diagnostics.checks" :key="check.key" class="wecom-check" :class="{passed:check.passed}"><span class="wecom-check-mark">{{ check.passed ? '✓' : '!' }}</span><div><b>{{ check.label }}</b><small>{{ check.detail }}</small></div></div></div>
+        </div>
+
+        <section class="kf-section">
+          <div class="kf-section-head"><div><h3>微信客服号</h3><p class="muted">同步不会覆盖本地业务配置；新账号默认停用。</p></div><button class="btn btn-primary" :disabled="tenant.syncing || tenant.checking || !tenant.enabled" @click="syncWeComAccounts(tenant)">{{ tenant.syncing ? '同步中…' : '从企微同步客服号' }}</button></div>
+          <details class="wecom-advanced">
+            <summary>高级操作：手动添加客服号</summary>
+            <div class="wecom-advanced-body">
+              <div class="tenant-form">
+                <label class="account-field"><span class="wecom-field-label">open_kfid <span class="wecom-help" tabindex="0" data-tip="微信客服账号的唯一标识，由企微接口返回，通常以 wk 开头。优先使用自动同步，避免手工复制错误。">?</span></span><input v-model="tenant.newAccount.openKfid" placeholder="wk... 或客服号标识"></label>
+                <label class="account-field"><span>客服号名称</span><input v-model="tenant.newAccount.name" placeholder="如 抗衰客服"></label>
+                <label class="account-field"><span>业务范围</span><input v-model="tenant.newAccount.businessScope" placeholder="如 仅回答抗衰项目"></label>
+                <label class="account-field full"><span>独立欢迎语（留空使用全局欢迎语）</span><textarea v-model="tenant.newAccount.welcomeMessage" placeholder="该客服号客户进入会话时发送"></textarea></label>
+              </div>
+              <div class="admin-account-actions"><label class="switch-field"><span class="switch"><input type="checkbox" v-model="tenant.newAccount.enabled"><span class="slider"></span></span><span class="switch-text">创建后启用</span></label><button class="btn btn-primary" @click="createWeComAccount(tenant)">添加客服号</button></div>
+            </div>
+          </details>
+          <div v-for="account in tenant.accounts" :key="account.id" class="kf-account">
+            <div class="kf-account-head"><strong>{{ account.name }} <span class="muted">{{ account.openKfid }}</span></strong><div class="tenant-actions"><span class="ai-status" :class="account.enabled ? 'matched' : 'failed'">{{ account.enabled ? '已启用' : '已停用' }}</span><button class="btn btn-danger" @click="deleteWeComAccount(tenant, account)">删除</button></div></div>
+            <div class="tenant-form">
+              <label class="account-field"><span>open_kfid</span><input v-model="account.draft.openKfid"></label>
+              <label class="account-field"><span>客服号名称</span><input v-model="account.draft.name"></label>
+              <label class="account-field"><span>业务范围</span><input v-model="account.draft.businessScope"></label>
+              <label class="account-field full"><span>独立欢迎语</span><textarea v-model="account.draft.welcomeMessage" placeholder="留空使用全局欢迎语"></textarea></label>
+            </div>
+            <div class="admin-account-actions"><label class="switch-field"><span class="switch"><input type="checkbox" v-model="account.draft.enabled"><span class="slider"></span></span><span class="switch-text">启用客服号</span></label><button class="btn btn-primary" @click="saveWeComAccount(tenant, account)">保存客服号</button></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 超级管理员：动态主备聊天模型 -->
+    <div v-if="role === 'super_admin' && tab === 'models'" class="model-page">
+      <section class="model-hero">
+        <div>
+          <span class="chip chip-done">OpenAI 兼容协议</span>
+          <h2>聊天模型与主备切换</h2>
+        </div>
+        <div class="model-hero-actions">
+          <button class="btn btn-primary" @click="openAiModelDialog()">＋ 添加新模型</button>
+        </div>
+      </section>
+
+      <section class="model-route" aria-label="当前模型调用顺序">
+        <article class="model-route-card primary">
+          <div class="model-route-label"><span>① 优先调用 · 主模型</span><span class="ai-status" :class="modelSummary.primary && modelSummary.primary.apiKeyConfigured ? 'matched' : 'failed'">{{ modelSummary.primary && modelSummary.primary.apiKeyConfigured ? '可调用' : '缺少 Key' }}</span></div>
+          <h3>{{ (modelSummary.primary && modelSummary.primary.displayName) || '尚未设置' }}</h3>
+          <code>{{ (modelSummary.primary && modelSummary.primary.modelName) || '—' }}</code>
+        </article>
+        <div class="model-route-arrow" aria-hidden="true">→</div>
+        <article class="model-route-card fallback">
+          <div class="model-route-label"><span>② 主模型失败后 · 备用模型</span><span class="ai-status" :class="modelSummary.fallback && modelSummary.fallback.apiKeyConfigured ? 'matched' : 'failed'">{{ modelSummary.fallback && modelSummary.fallback.apiKeyConfigured ? '可调用' : '缺少 Key' }}</span></div>
+          <h3>{{ (modelSummary.fallback && modelSummary.fallback.displayName) || '尚未设置' }}</h3>
+          <code>{{ (modelSummary.fallback && modelSummary.fallback.modelName) || '—' }}</code>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="model-list-head"><div><h2>模型列表（共 {{ aiModels.length }} 个）</h2></div><button class="btn btn-plain" :disabled="modelLoading" @click="loadAiModels">{{ modelLoading ? '刷新中…' : '刷新' }}</button></div>
+        <table>
+          <tr><th scope="col">模型</th><th scope="col">接口地址</th><th scope="col">角色</th><th scope="col">状态</th><th scope="col">操作</th></tr>
+          <tr v-if="!aiModels.length"><td colspan="5" class="empty-row">暂无模型配置，请添加一个 OpenAI 兼容模型</td></tr>
+          <tr v-for="model in pagedAiModels" :key="model.id">
+            <td><div class="model-name"><strong>{{ model.displayName }}</strong><small>{{ model.modelName }}</small></div></td>
+            <td><div class="model-endpoint"><code :title="model.baseUrl">{{ model.baseUrl }}</code><small>{{ model.protocol === 'openai-compatible' ? 'OpenAI 兼容' : model.protocol }}</small></div></td>
+            <td><span class="model-role" :class="model.role">{{ aiModelRoleLabel(model.role) }}</span></td>
+            <td><div class="model-status"><span :class="model.enabled ? 'ready' : 'missing'">{{ model.enabled ? '● 已启用' : '○ 已停用' }}</span><span :class="model.apiKeyConfigured ? 'ready' : 'missing'">{{ model.apiKeyConfigured ? 'Key 已配置' : 'Key 未配置' }}</span><small v-if="model.keySource" class="muted">{{ model.keySource }}</small><small v-if="modelTestResults[model.id]" :class="modelTestResults[model.id].passed ? 'ready' : 'missing'" :title="modelTestResults[model.id].message">{{ modelTestResults[model.id].passed ? `综合通过 · 基础 ${modelTestResults[model.id].basicLatencyMs}ms / 评测 ${modelTestResults[model.id].qualityLatencyMs}ms` : '综合未通过（悬停查看原因）' }}</small></div></td>
+            <td><div class="model-actions">
+              <button class="btn btn-plain" @click="openAiModelDialog(model)">编辑</button>
+              <button class="btn btn-plain" title="先测试基础聊天，再用当前真实评测 Prompt 测试 JSON 评分能力" :disabled="modelTestingId===model.id || !model.apiKeyConfigured" @click="testAiModel(model)">{{ modelTestingId===model.id ? '综合测试中…' : '综合测试' }}</button>
+              <button class="btn btn-primary" v-if="model.role!=='eval'" :disabled="model.role==='primary' || !model.enabled || !model.apiKeyConfigured" @click="assignAiModelRole(model,'primary')">设为主模型</button>
+              <button class="btn btn-plain" v-if="model.role!=='eval'" :disabled="model.role==='fallback' || !model.enabled || !model.apiKeyConfigured" @click="assignAiModelRole(model,'fallback')">设为备用</button>
+              <button class="btn btn-plain" v-if="model.role!=='eval'" :disabled="model.role==='eval'" @click="assignAiModelRole(model,'eval')" title="把本模型设为评测专用，供质量评测页面选择使用">设为评测专用</button>
+              <button class="btn btn-plain" :disabled="model.role==='candidate'" @click="assignAiModelRole(model,'candidate')" title="把本模型从当前角色降级为普通候选，降级后即可停用或删除">设为普通候选</button>
+              <span class="btn-tip" :title="(model.role==='primary'||model.role==='fallback') ? '主模型/备用模型不可停用：请先点“设为普通候选”降级后再停用' : ''">
+                <button class="btn" :class="model.enabled ? 'btn-danger' : 'btn-plain'" :disabled="model.role==='primary' || model.role==='fallback'" @click="toggleAiModel(model)">{{ model.enabled ? '停用' : '启用' }}</button>
+              </span>
+              <span class="btn-tip" :title="(model.role==='primary'||model.role==='fallback') ? '主模型/备用模型不可删除：请先点“设为普通候选”降级后再删除' : ''">
+                <button class="btn btn-danger" :disabled="model.role==='primary' || model.role==='fallback'" @click="deleteAiModel(model)">删除</button>
+              </span>
+            </div></td>
+          </tr>
+        </table>
+        <div v-if="totalAiModelPages > 1" class="pager">
+          <button class="btn btn-plain" :disabled="modelPage<=1" @click="modelPage--">上一页</button>
+          <span class="muted">第 {{ modelPage }} / {{ totalAiModelPages }} 页 · 共 {{ aiModels.length }} 个模型</span>
+          <button class="btn btn-plain" :disabled="modelPage>=totalAiModelPages" @click="modelPage++">下一页</button>
+        </div>
+      </section>
+
+      <!-- 统一模型管理：视觉 / 向量模型 + 通义密钥，全部在模型管理页维护 -->
+      <section class="model-endpoint-section">
+        <div class="model-list-head"><div><h2>非对话模型（视觉 / 向量）</h2></div></div>
+        <div class="model-endpoint-grid">
+          <div class="model-endpoint-card accent-vision">
+            <h3><span class="model-endpoint-badge"><svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="currentColor"/></svg>视觉</span>图片理解 / OCR</h3>
+            <label class="account-field full"><span>接口地址</span><input v-model="cfgVisionBase.value" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"></label>
+            <label class="account-field full"><span>模型名称</span><input v-model="cfgVisionName.value" placeholder="qwen-vl-max"></label>
+            <template v-for="item in settingKeys.filter(k => k.key === 'model.vision.apiKey')" :key="item.key">
+              <label class="account-field full key-wrap"><span>API Key</span><input :type="revealedKeys[item.key] ? 'text' : 'password'" v-model="settingValues[item.key]" :placeholder="item.configured ? '已配置；输入新值可替换' : (item.desc||'留空则回退通义 Key')" autocomplete="new-password"><button v-if="role === 'super_admin' && item.configured" type="button" class="key-eye" :title="revealedKeys[item.key] ? '隐藏密钥' : '查看密钥'" @click="toggleRevealSetting(item)"><svg v-if="!revealedKeys[item.key]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></label>
+            </template>
+            <div class="model-endpoint-actions">
+              <button class="btn btn-primary" :disabled="!cfgVisionBase.key || (cfgVisionBase.value===cfgVisionBase.original && cfgVisionName.value===cfgVisionName.original)" @click="saveModelEndpoint([cfgVisionBase, cfgVisionName])">发布视觉模型配置</button>
+              <template v-for="item in settingKeys.filter(k => k.key === 'model.vision.apiKey')" :key="item.key">
+                <button class="btn btn-plain" :disabled="!settingValues[item.key]" @click="saveSetting(item)">保存视觉密钥</button>
+                <button v-if="item.configured && !item.fromEnv" class="btn btn-plain" @click="clearSetting(item)">清除</button>
+              </template>
+            </div>
+          </div>
+          <div class="model-endpoint-card accent-vector">
+            <h3><span class="model-endpoint-badge"><svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="currentColor"/></svg>向量</span>知识库嵌入</h3>
+            <label class="account-field full"><span>接口地址</span><input v-model="cfgEmbedBase.value" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"></label>
+            <label class="account-field full"><span>模型名称</span><input v-model="cfgEmbedName.value" placeholder="text-embedding-v3"></label>
+            <template v-for="item in settingKeys.filter(k => k.key === 'model.embedding.apiKey')" :key="item.key">
+              <label class="account-field full key-wrap"><span>API Key</span><input :type="revealedKeys[item.key] ? 'text' : 'password'" v-model="settingValues[item.key]" :placeholder="item.configured ? '已配置；输入新值可替换' : (item.desc||'留空则回退通义 Key')" autocomplete="new-password"><button v-if="role === 'super_admin' && item.configured" type="button" class="key-eye" :title="revealedKeys[item.key] ? '隐藏密钥' : '查看密钥'" @click="toggleRevealSetting(item)"><svg v-if="!revealedKeys[item.key]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></label>
+            </template>
+            <div class="model-endpoint-actions">
+              <button class="btn btn-primary" :disabled="embeddingSwitchRunning || !cfgEmbedBase.key || (cfgEmbedBase.value===cfgEmbedBase.original && cfgEmbedName.value===cfgEmbedName.original && !settingValues['model.embedding.apiKey'])" @click="saveEmbeddingModel">{{ embeddingSwitchRunning ? '正在重建知识向量…' : '安全切换向量模型' }}</button>
+              <template v-for="item in settingKeys.filter(k => k.key === 'model.embedding.apiKey')" :key="item.key">
+                <button class="btn btn-plain" :disabled="!settingValues[item.key]" @click="saveSetting(item)">保存向量密钥</button>
+                <button v-if="item.configured && !item.fromEnv" class="btn btn-plain" @click="clearSetting(item)">清除</button>
+              </template>
+            </div>
+            <div v-if="embeddingSwitchTask" class="model-endpoint-note" style="margin-top:10px">
+              <strong>{{ embeddingSwitchStatusText }}</strong>
+              <span v-if="Number(embeddingSwitchTask.total_chunks || 0) > 0">：{{ Number(embeddingSwitchTask.processed_chunks || 0) }}/{{ Number(embeddingSwitchTask.total_chunks || 0) }} 片</span>
+              <span v-if="embeddingSwitchTask.error" style="color:var(--danger)"> — {{ embeddingSwitchTask.error }}</span>
+            </div>
+          </div>
+          <div class="model-endpoint-card accent-key">
+            <h3><span class="model-endpoint-badge"><svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="currentColor"/></svg>密钥</span>通义 DashScope</h3>
+            <template v-for="item in settingKeys.filter(k => k.key === 'ai.dashscope_key')" :key="item.key">
+              <label class="account-field full key-wrap"><span>{{ item.label }}</span><input :type="revealedKeys[item.key] ? 'text' : 'password'" v-model="settingValues[item.key]" :placeholder="item.configured ? '已配置；输入新值可替换' : (item.desc||'请输入通义千问 API Key')" autocomplete="new-password"><button v-if="role === 'super_admin' && item.configured" type="button" class="key-eye" :title="revealedKeys[item.key] ? '隐藏密钥' : '查看密钥'" @click="toggleRevealSetting(item)"><svg v-if="!revealedKeys[item.key]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></label>
+              <div class="model-endpoint-actions"><button class="btn btn-primary" :disabled="!settingValues[item.key]" @click="saveSetting(item)">保存密钥</button><button v-if="item.configured && !item.fromEnv" class="btn btn-plain" @click="clearSetting(item)">清除</button></div>
+            </template>
+          </div>
+        </div>
+      </section>
+
+      <div v-if="modelDialog" class="kb-mask" @click.self="closeAiModelDialog">
+        <div class="kb-modal model-modal" role="dialog" aria-modal="true" aria-label="模型配置">
+          <div class="kb-modal-head"><h2>{{ modelDraft.id ? '编辑模型' : '添加新模型' }}</h2><button class="btn btn-plain" @click="closeAiModelDialog">✕ 关闭</button></div>
+          <div class="kb-modal-body">
+            <div class="model-form">
+              <label class="account-field"><span>显示名称</span><input v-model="modelDraft.displayName" placeholder="如 DeepSeek / 智谱 GLM"></label>
+              <label class="account-field"><span>模型标识</span><input v-model="modelDraft.modelName" placeholder="如 deepseek-v4-flash"></label>
+              <label class="account-field full"><span>API Base URL</span><input v-model="modelDraft.baseUrl" placeholder="https://api.example.com/v1"><small>填写接口根地址，不要包含 /chat/completions</small></label>
+              <label class="account-field full key-wrap"><span>API Key</span><input v-model="modelDraft.apiKey" :type="modelKeyRevealed ? 'text' : 'password'" autocomplete="new-password" :placeholder="modelDraft.id ? '已配置时留空表示保持不变；点眼睛可查看已保存密钥' : '请输入平台提供的 API Key'"><button v-if="modelDraft.id" type="button" class="key-eye" :title="modelKeyRevealed ? '隐藏密钥' : '查看已保存密钥'" @click="toggleModelKeyReveal"><svg v-if="!modelKeyRevealed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button><small>保存后不会再次回显，数据库中使用 AES-GCM 加密</small></label>
+              <label v-if="!modelDraft.id" class="account-field"><span>创建后角色</span><select v-model="modelDraft.role"><option value="candidate">普通候选</option><option value="primary">主模型</option><option value="fallback">备用模型</option><option value="eval">评测专用</option></select></label>
+              <label v-if="!modelDraft.id" class="account-field"><span>启用状态</span><select v-model="modelDraft.enabled"><option :value="true">创建后启用</option><option :value="false">暂不启用</option></select></label>
+            </div>
+            <p class="model-form-note">仅支持 HTTPS 的 OpenAI Chat Completions 兼容接口。</p>
+            <div class="dialog-actions" style="margin-top:16px"><button class="btn-dialog-cancel" @click="closeAiModelDialog">取消</button><button class="btn-dialog-primary" :disabled="modelSaving" @click="saveAiModel">{{ modelSaving ? '保存中…' : '保存模型' }}</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="role === 'super_admin' && tab === 'modelmon'" class="model-page">
+      <section class="model-hero">
+        <div>
+          <span class="chip chip-done">实时监控</span>
+          <h2>模型数据监控</h2>
+        </div>
+      </section>
+
+      <section class="card" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px">
+        <div style="flex:1;min-width:240px">
+          <h2 style="margin:0 0 4px">响应缓存命中率</h2>
+        </div>
+        <div style="display:flex;align-items:center;gap:20px">
+          <div style="text-align:center">
+            <div style="font-size:34px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums">{{ cacheMetrics.rate }}<span style="font-size:16px">%</span></div>
+            <div class="muted" style="font-size:11px;margin-top:4px">命中率</div>
+          </div>
+          <div style="font-size:13px;color:var(--ink-2)">命中 <strong style="color:var(--ink)">{{ cacheMetrics.hit }}</strong> / 查询 <strong style="color:var(--ink)">{{ cacheMetrics.lookups }}</strong></div>
+          <button class="btn btn-plain" :disabled="cacheLoading" @click="loadCacheMetrics">{{ cacheLoading ? '刷新中…' : '刷新' }}</button>
+        </div>
+      </section>
+
+      <section class="card" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px">
+        <div style="flex:1;min-width:240px">
+          <h2 style="margin:0 0 4px">主模型健康</h2>
+        </div>
+        <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+          <div style="text-align:center">
+            <div :style="{fontSize:'20px',fontWeight:700,lineHeight:1,fontVariantNumeric:'tabular-nums',color: gwHealth.circuitOpen ? 'var(--danger, #e5484d)' : 'var(--trust, #2e9e5b)'}">{{ gwHealth.circuitOpen ? '已熔断' : '正常' }}</div>
+            <div class="muted" style="font-size:11px;margin-top:4px">主模型状态</div>
+          </div>
+          <div style="font-size:13px;color:var(--ink-2);line-height:1.9">
+            连续失败 <strong style="color:var(--ink)">{{ gwHealth.consecutiveFailures }}</strong><br>
+            降级次数 <strong style="color:var(--ink)">{{ gwHealth.failoverCount }}</strong><br>
+            熔断绕过 <strong style="color:var(--ink)">{{ gwHealth.bypassCount }}</strong>
+          </div>
+          <div style="font-size:12px;color:var(--ink-2)" v-if="gwHealth.lastFailoverAt">最近降级<br><strong style="color:var(--ink)">{{ gwHealth.lastFailoverAt }}</strong></div>
+          <button class="btn btn-plain" :disabled="cacheLoading" @click="loadCacheMetrics">{{ cacheLoading ? '刷新中…' : '刷新' }}</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>模型调用分布（累计）</h2>
+        <div class="comp-wrap" v-if="modelCallSegments.length">
+          <svg viewBox="0 0 150 150" class="comp-donut" role="img" aria-label="模型调用分布环图">
+            <circle cx="75" cy="75" r="50" fill="none" stroke="var(--bg)" stroke-width="26"></circle>
+            <circle v-for="seg in modelCallSegments" :key="seg.name" cx="75" cy="75" r="50" fill="none"
+                    :stroke="seg.color" stroke-width="26"
+                    :stroke-dasharray="seg.dash"
+                    :transform="'rotate(' + seg.rotate + ' 75 75)'">
+              <title>{{ seg.name }}</title>
+            </circle>
+            <circle cx="75" cy="75" r="34" fill="var(--surface)"></circle>
+            <text x="75" y="71" text-anchor="middle" font-size="22" font-weight="700" fill="var(--ink)" font-variant-numeric="tabular-nums">{{ modelCallTotal }}</text>
+            <text x="75" y="87" text-anchor="middle" font-size="11" fill="var(--ink-2)">次调用</text>
+          </svg>
+          <div class="comp-legend">
+            <div v-for="seg in modelCallSegments" :key="seg.name" class="comp-legend-item">
+              <span class="comp-dot" :style="{background: seg.color}"></span>
+              <span class="comp-name">{{ seg.name }}</span>
+              <span class="comp-count">{{ seg.count }} 次</span>
+              <span class="comp-bar"><span class="comp-bar-fill" :style="{width: (seg.pct*100).toFixed(1) + '%', background: seg.color}"></span></span>
+              <span class="comp-pct">{{ (seg.pct*100).toFixed(1) }}%</span>
+            </div>
+          </div>
+        </div>
+        <p v-else class="muted" style="font-size:13px">暂无调用数据（服务启动后尚无模型请求）。</p>
+      </section>
+
+      <section class="card">
+        <h2>缓存命中构成（累计）</h2>
+        <div class="comp-wrap" v-if="cacheSegments.length">
+          <svg viewBox="0 0 150 150" class="comp-donut" role="img" aria-label="缓存命中构成环图">
+            <circle cx="75" cy="75" r="50" fill="none" stroke="var(--bg)" stroke-width="26"></circle>
+            <circle v-for="seg in cacheSegments" :key="seg.name" cx="75" cy="75" r="50" fill="none"
+                    :stroke="seg.color" stroke-width="26"
+                    :stroke-dasharray="seg.dash"
+                    :transform="'rotate(' + seg.rotate + ' 75 75)'">
+              <title>{{ seg.name }}</title>
+            </circle>
+            <circle cx="75" cy="75" r="34" fill="var(--surface)"></circle>
+            <text x="75" y="71" text-anchor="middle" font-size="20" font-weight="700" fill="var(--ink)" font-variant-numeric="tabular-nums">{{ cacheMetrics.rate }}<tspan font-size="12">%</tspan></text>
+            <text x="75" y="87" text-anchor="middle" font-size="11" fill="var(--ink-2)">命中率</text>
+          </svg>
+          <div class="comp-legend">
+            <div v-for="seg in cacheSegments" :key="seg.name" class="comp-legend-item">
+              <span class="comp-dot" :style="{background: seg.color}"></span>
+              <span class="comp-name">{{ seg.name }}</span>
+              <span class="comp-count">{{ seg.count }} 次</span>
+              <span class="comp-bar"><span class="comp-bar-fill" :style="{width: (seg.pct*100).toFixed(1) + '%', background: seg.color}"></span></span>
+              <span class="comp-pct">{{ (seg.pct*100).toFixed(1) }}%</span>
+            </div>
+          </div>
+        </div>
+        <p v-else class="muted" style="font-size:13px">暂无缓存数据（服务启动后尚无命中/查询记录）。</p>
+      </section>
+
+      <section class="card">
+        <h2>近期趋势（最近 3 小时 · 按分钟）</h2>
+        <div v-if="trendChart" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+              <span style="font-size:13px;color:var(--ink-2)">缓存命中率</span>
+              <strong style="font-size:16px;color:#2e9e5b;font-variant-numeric:tabular-nums">{{ trendChart.lastRate.toFixed(1) }}%</strong>
+            </div>
+            <svg :viewBox="'0 0 ' + trendChart.W + ' ' + trendChart.H" style="width:100%;height:auto;display:block">
+              <defs>
+                <linearGradient id="tc-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#2e9e5b" stop-opacity="0.30"/>
+                  <stop offset="100%" stop-color="#2e9e5b" stop-opacity="0.02"/>
+                </linearGradient>
+              </defs>
+              <line x1="4" :y1="trendChart.H - trendChart.padB" :x2="trendChart.W - 4" :y2="trendChart.H - trendChart.padB" stroke="var(--line)" stroke-width="1"/>
+              <path :d="trendChart.cacheArea" fill="url(#tc-fill)"/>
+              <path :d="trendChart.cacheLine" fill="none" stroke="#2e9e5b" stroke-width="2" stroke-linejoin="round"/>
+              <text v-for="lb in trendChart.labels" :key="'c'+lb.t" :x="lb.x" :y="trendChart.H - 6" text-anchor="middle" font-size="10" fill="var(--ink-3)">{{ lb.t }}</text>
+            </svg>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+              <span style="font-size:13px;color:var(--ink-2)">模型调用量</span>
+              <strong style="font-size:16px;color:var(--brand);font-variant-numeric:tabular-nums">{{ trendChart.lastCalls }} 次/分</strong>
+            </div>
+            <svg :viewBox="'0 0 ' + trendChart.W + ' ' + trendChart.H" style="width:100%;height:auto;display:block">
+              <defs>
+                <linearGradient id="tk-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--brand)" stop-opacity="0.30"/>
+                  <stop offset="100%" stop-color="var(--brand)" stop-opacity="0.02"/>
+                </linearGradient>
+              </defs>
+              <line x1="4" :y1="trendChart.H - trendChart.padB" :x2="trendChart.W - 4" :y2="trendChart.H - trendChart.padB" stroke="var(--line)" stroke-width="1"/>
+              <path :d="trendChart.callsArea" fill="url(#tk-fill)"/>
+              <path :d="trendChart.callsLine" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linejoin="round"/>
+              <text v-for="lb in trendChart.labels" :key="'k'+lb.t" :x="lb.x" :y="trendChart.H - 6" text-anchor="middle" font-size="10" fill="var(--ink-3)">{{ lb.t }}</text>
+            </svg>
+          </div>
+        </div>
+        <p v-if="trendChart && trendChart.empty" class="muted" style="margin:10px 0 0;font-size:12px">暂无调用记录，运行后将自动采集并绘制曲线。</p>
+      </section>
+    </div>
+
+    <!-- 设置：非聊天模型与其他平台密钥（保存即热生效，无需重启） -->
+    <div v-if="role === 'super_admin' && tab === 'settings'" class="card">
+      <div class="settings-title-row">
+        <h2>其他接口</h2>
+      </div>
+      <template v-for="grp in settingGroups" :key="grp">
+        <h3 style="margin:16px 0 8px;font-size:14px;border-bottom:1px solid var(--line);padding-bottom:6px">{{ grp }}</h3>
+        <div v-for="item in visibleSettingKeys.filter(k => k.group === grp)" :key="item.key" class="form-row" style="align-items:flex-end">
+          <div style="flex:1">
+            <label style="font-size:13px;font-weight:600">
+              {{ item.label }}
+              <span v-if="item.configured" style="color:var(--trust);font-size:11px;margin-left:6px">✓ 已配置{{ item.fromEnv ? '（来自环境变量）' : '' }}</span>
+              <span v-else style="color:var(--warning);font-size:11px;margin-left:6px">未配置</span>
+            </label>
+            <span class="key-wrap">
+              <input :type="revealedKeys[item.key] ? 'text' : 'password'" v-model="settingValues[item.key]" :placeholder="item.configured ? '已配置；输入新值可替换' : item.desc" autocomplete="new-password"
+                     style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)">
+              <button v-if="role === 'super_admin' && item.configured" type="button" class="key-eye" :title="revealedKeys[item.key] ? '隐藏密钥' : '查看密钥'" @click="toggleRevealSetting(item)"><svg v-if="!revealedKeys[item.key]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
+            </span>
+          </div>
+          <button class="btn btn-primary" style="margin-bottom:3px" :disabled="!settingValues[item.key]" @click="saveSetting(item)">保存</button>
+          <button v-if="item.configured && !item.fromEnv" class="btn btn-danger" style="margin-bottom:3px" @click="clearSetting(item)">清除</button>
+        </div>
+      </template>
+    </div>
+      </main>
+    </section>
+  </div>
+
+  <!-- 图片灯箱：全屏预览，点击关闭 -->
+  <div v-if="imgPreview" class="lightbox" role="dialog" aria-modal="true" aria-label="图片预览" tabindex="-1" @click.self="imgPreview = ''" @keydown.esc="imgPreview = ''">
+    <button type="button" class="lightbox-close" aria-label="关闭图片预览" @click="imgPreview = ''">×</button>
+    <img :src="imgPreview" alt="图片预览">
+  </div>
+  <div v-if="confirmDialog" class="dialog-mask" @click.self="resolveConfirm(false)">
+    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="admin-confirm-title">
+      <h2 id="admin-confirm-title">{{ confirmDialog.title }}</h2>
+      <p>{{ confirmDialog.message }}</p>
+      <label v-if="confirmDialog.requirePassword" class="account-field" style="margin-top:14px">
+        <span>当前超级管理员密码</span>
+        <input v-model="confirmDialog.currentPassword" type="password" autocomplete="current-password"
+               placeholder="用于服务端二次验证" @keyup.enter="resolveConfirm(true)">
+      </label>
+      <div class="dialog-actions"><button type="button" class="btn-dialog-cancel" @click="resolveConfirm(false)">取消</button><button type="button" class="btn-dialog-primary" @click="resolveConfirm(true)">确认</button></div>
+    </div>
+  </div>
+  </template>
+</div>
+
+<script src="/js/common.js"></script>
+<script src="/js/vue.global.prod.js"></script>
+<script src="/js/admin-app.js"></script>
+</body>
+</html>

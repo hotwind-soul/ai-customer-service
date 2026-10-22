@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "AiCustomerService (Spring Boot)",
+      "request": "launch",
+      "mainClass": "com.example.aics.AiCustomerServiceApplication",
+      "projectName": "ai-customer-service",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.local/app.env",
+      "vmArgs": "-Dfile.encoding=UTF-8",
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "java",
+      "name": "AiCustomerService (远程调试 5005)",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005
+    }
+  ]
+}

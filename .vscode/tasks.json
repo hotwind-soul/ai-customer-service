@@ -1,0 +1,52 @@
+{
+    // 自定义任务：菜单栏 终端(Terminal) -> 运行任务(Run Task) 即可点击执行
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Maven: 打包 (跳过测试)",
+            "type": "shell",
+            "command": "C:\\Users\\JT\\tools\\apache-maven-3.9.16\\bin\\mvn.cmd",
+            "args": ["-s", "settings.xml", "-DskipTests", "package"],
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "Maven: 打包 (含测试)",
+            "type": "shell",
+            "command": "C:\\Users\\JT\\tools\\apache-maven-3.9.16\\bin\\mvn.cmd",
+            "args": ["-s", "settings.xml", "package"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Maven: 运行测试",
+            "type": "shell",
+            "command": "C:\\Users\\JT\\tools\\apache-maven-3.9.16\\bin\\mvn.cmd",
+            "args": ["-s", "settings.xml", "test"],
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "应用: 启动 (spring-boot:run)",
+            "type": "shell",
+            "command": "C:\\Users\\JT\\tools\\apache-maven-3.9.16\\bin\\mvn.cmd",
+            "args": ["-s", "settings.xml", "spring-boot:run"],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "依赖: 启动 PostgreSQL + Redis",
+            "type": "shell",
+            "command": "docker",
+            "args": ["compose", "up", "-d"],
+            "problemMatcher": []
+        },
+        {
+            "label": "依赖: 停止 PostgreSQL + Redis",
+            "type": "shell",
+            "command": "docker",
+            "args": ["compose", "stop"],
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270" role="img" aria-label="腾讯地图地址卡片">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ecf8f5"/>
+      <stop offset="1" stop-color="#d9f1ea"/>
+    </linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#173c32" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <rect width="480" height="270" rx="28" fill="url(#bg)"/>
+  <g opacity=".48" fill="none" stroke="#8ec8b8" stroke-width="5">
+    <path d="M-20 70C65 35 123 96 205 65S356 25 505 61"/>
+    <path d="M-12 202C72 164 151 226 241 188s155-41 262-8"/>
+    <path d="M83-18c17 76-25 113-8 181s64 82 43 129"/>
+    <path d="M356-20c-16 63 20 102 4 159s-54 84-31 151"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="M240 48c-47 0-85 38-85 85 0 63 85 112 85 112s85-49 85-112c0-47-38-85-85-85z" fill="#16a77b"/>
+    <circle cx="240" cy="133" r="34" fill="#fff"/>
+    <circle cx="240" cy="133" r="16" fill="#bde8dc"/>
+  </g>
+</svg>

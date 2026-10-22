@@ -1,0 +1,343 @@
+:root {
+  --brand: #D6336C;
+  --brand-hover: #B8235A;
+  --brand-soft: #FDF0F5;
+  --brand-line: #F5C6D8;
+  --trust: #0F766E;
+  --trust-soft: #ECF7F5;
+  --trust-line: #B7E0DA;
+  --success: #15803D;
+  --success-bg: #F0FDF4;
+  --success-line: #BBF7D0;
+  --warning: #B45309;
+  --warning-bg: #FFFBEB;
+  --warning-line: #FDE68A;
+  --danger: #DC2626;
+  --danger-bg: #FEF2F2;
+  --ink: #2B2A28;
+  --ink-2: #6B6A66;
+  --ink-3: #767470;
+  --line: #E8E4DE;
+  --surface: #FFFFFF;
+  --bg: #F6F4F1;
+  --side-bg: #232220;
+  --side-text: #E8E4DE;
+  --side-muted: #A8A49C;  --side-active: #3A3733;
+  --side-line: #34322F;
+  --surface-soft: #FBFAF8;
+  --overlay: rgba(24, 22, 20, .52);
+  --shadow-xs: 0 1px 2px rgba(43, 42, 40, .05);
+  --shadow-sm: 0 6px 18px rgba(43, 42, 40, .07);
+  --shadow-md: 0 14px 36px rgba(43, 42, 40, .11);
+  --shadow-lg: 0 24px 64px rgba(43, 42, 40, .16);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --t-fast: 150ms ease;
+  /* 按钮 hover 背景：浅色用深粉（白字 4.6:1），深色下覆写为深粉线（白字 9:1） */
+  --btn-hover-bg: var(--brand-hover);
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ===== 深色模式（W26-M5 统一：token 单源，三端可共享；[data-theme="dark"] 挂在 <html> 上） ===== */
+/* 对比度校验（WCAG AA，4.5:1）：-ink 13:1 / -ink-2 8:1 / -ink-3 5.5:1 / -side-muted 6.3:1 */
+[data-theme="dark"] {
+  --brand: #F0709F; --brand-hover: #F494B8; --brand-soft: #3A2530; --brand-line: #5A3544;
+  --trust: #5DD0B8; --trust-soft: #1E3330; --trust-line: #2E4A44;
+  --success: #6EE7A0; --success-bg: #1C3227; --success-line: #2F4A38;
+  --warning: #F5B25C; --warning-bg: #38291A; --warning-line: #54402A;
+  --danger: #F58B8B; --danger-bg: #3A2020; --danger-line: #573030;
+  --ink: #EDE9E2; --ink-2: #BDB8AF; --ink-3: #A6A29A;
+  --line: #3B3833; --surface: #2A2824; --bg: #1E1C19;
+  --side-bg: #171512; --side-text: #EDE9E2; --side-muted: #A39E95; --side-active: #33302B; --side-line: #2C2925;
+  --surface-soft: #24221E; --overlay: rgba(0,0,0,.62);
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.16); --shadow-sm: 0 8px 20px rgba(0,0,0,.2);
+  --shadow-md: 0 16px 40px rgba(0,0,0,.28); --shadow-lg: 0 26px 70px rgba(0,0,0,.36);
+  /* 深色下按钮 hover 用深粉线作底，白字保持 9:1 可读 */
+  --btn-hover-bg: var(--brand-line);
+}
+
+/* 深色模式下输入控件底色统一（select/textarea 等浏览器默认样式会变白底） */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  color-scheme: dark;
+}
+
+/* 深色下红色角标（如坐席"新"徽标）：亮红底 + 白字对比不足，改用深红底 */
+[data-theme="dark"] .badge { background: var(--danger-line); }
+
+/* ===== 通用视觉打磨（W26 收尾：三端共享） ===== */
+
+/* 全局文字色兜底：body 默认 color 必须是 --ink，否则裸元素（span/p/label/h2 等）
+   落到浏览器 UA 默认黑色 → 深色模式下黑字看不清。
+   （表单控件 button/input/select 有 UA 自带色不断继承链，已单独处理） */
+body {
+  color: var(--ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button,
+input,
+select,
+textarea,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  transition: color var(--t-fast), background-color var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: .62;
+}
+
+input,
+select,
+textarea {
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), background-color var(--t-fast);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+/* 文字渲染：更清晰抗锯齿 */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 选区色：品牌浅粉，替代系统默认蓝 */
+::selection {
+  background: var(--brand-soft);
+  color: var(--ink);
+}
+
+/* 细滚动条：token 色，圆角，融入界面 */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-3); background-clip: padding-box; }
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.field-label {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ===== 跳过链接（WCAG 2.4.1）=====
+   默认屏幕外隐藏；Tab 聚焦时显示在左上角。键盘 / 屏阅用户首键直达主内容，
+   不用每次都 Tab 过整个 sidebar/header。 */
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 14px;
+  z-index: 9999;
+  padding: 11px 18px;
+  background: var(--brand);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 6px 16px rgba(214, 51, 108, .28);
+  transition: top .18s ease;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 14px;
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+.field-hint {
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(17, 16, 15, .52);
+}
+
+.dialog-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .22);
+  color: var(--ink);
+}
+
+.dialog-card h2 {
+  margin-bottom: 8px;
+  font-size: 17px;
+}
+
+.dialog-card p {
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.dialog-actions button {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  transition: background var(--t-fast);
+}
+
+@media (max-width: 600px) {
+  .dialog-card { padding: 18px; }
+  .dialog-actions { flex-direction: column-reverse; }
+  .dialog-actions button { width: 100%; }
+}
+
+/* ===== 会话图片消息（客户页/坐席工作台共用） ===== */
+.msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.msg-image {
+  max-width: 200px; max-height: 200px; border-radius: 8px;
+  cursor: zoom-in; display: block; object-fit: cover;
+}
+.msg-image:active { opacity: 0.85; }
+
+/* ===== 坐席工作台发图按钮 ===== */
+.btn-send-image {
+  border: none; background: transparent; font-size: 20px; line-height: 1;
+  cursor: pointer; padding: 4px 6px; border-radius: 8px; align-self: center;
+}
+.btn-send-image:hover { background: rgba(0, 0, 0, 0.06); }
+.btn-send-image:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ===== 坐席会话转接选择列表 ===== */
+.transfer-list {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 8px 0 4px; max-height: 240px; overflow-y: auto;
+}
+.transfer-option {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line, #e5e5e5); border-radius: 10px;
+  background: transparent; cursor: pointer; font: inherit; color: inherit; text-align: left;
+}
+.transfer-option:hover { border-color: var(--trust, #2f80ed); }
+.transfer-option.active { border-color: var(--trust, #2f80ed); background: rgba(47, 128, 237, 0.06); }
+
+/* ===== 顾客端历史会话面板 ===== */
+.history-mask {
+  position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.history-panel {
+  width: min(560px, 100%); max-height: 76vh; display: flex; flex-direction: column;
+  background: var(--surface, #fff); border-radius: 14px 14px 0 0;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18); overflow: hidden;
+}
+.history-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--line, #eee); font-size: 16px;
+}
+.history-body { overflow-y: auto; padding: 8px 12px; flex: 1; }
+.history-empty { text-align: center; color: var(--ink-3, #999); padding: 32px 0; }
+.history-item {
+  display: block; width: 100%; text-align: left; border: 1px solid var(--line, #eee);
+  background: transparent; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  cursor: pointer; font: inherit; color: inherit;
+}
+.history-item:hover { border-color: var(--trust, #2f80ed); background: rgba(47, 128, 237, 0.04); }
+.history-q {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; margin-bottom: 6px;
+}
+.history-meta {
+  display: flex; gap: 8px; align-items: center; font-size: 12px;
+  color: var(--ink-3, #999);
+}
+.history-chip {
+  padding: 1px 8px; border-radius: 999px; font-size: 12px;
+  background: var(--ink-3, #999); color: #fff;
+}
+.history-chip.hs-active { background: var(--trust, #2f80ed); }
+.history-chip.hs-need_human { background: #e8a23d; }
+.history-chip.hs-human { background: #27ae60; }
+.history-pager {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 10px; border-top: 1px solid var(--line, #eee); font-size: 13px;
+}
+@media (min-width: 640px) {
+  .history-mask { align-items: center; }
+  .history-panel { border-radius: 14px; }
+}

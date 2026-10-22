@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="AI 客服系统管理后台使用、配置与故障排查帮助">
+  <title>帮助中心 · AI 客服系统</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/css/ui.css">
+  <link rel="stylesheet" href="/css/admin-theme.css">
+  <style>
+    :root {
+      --surface-2:var(--surface-soft); --brand-dark:var(--brand-hover);
+      --success-soft:var(--success-bg); --warning-soft:var(--warning-bg);
+      --shadow:var(--shadow-sm); --radius:var(--radius-lg);
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:
+      radial-gradient(circle at 8% 0%,color-mix(in srgb, var(--brand) 9%, transparent),transparent 28rem),
+      radial-gradient(circle at 92% 14%,color-mix(in srgb, var(--brand) 5%, transparent),transparent 26rem),var(--bg);
+      font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+    a { color:var(--brand-dark); }
+    a:hover { color:var(--brand); }
+    .topbar { position:sticky; top:0; z-index:10; border-bottom:1px solid var(--line);
+      background:var(--surface); backdrop-filter:blur(14px); }
+    .topbar-inner { max-width:1180px; margin:auto; min-height:64px; padding:10px 24px;
+      display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:750; }
+    .brand-mark { width:32px; height:32px; display:grid; place-items:center; color:#fff; border-radius:10px;
+      background:var(--brand); box-shadow:0 7px 18px color-mix(in srgb, var(--brand) 20%, transparent); }
+    .top-actions { display:flex; gap:9px; flex-wrap:wrap; }
+    .button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:38px;
+      padding:7px 14px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink);
+      font-weight:650; text-decoration:none; }
+    .button:hover { border-color:var(--brand-line); background:var(--brand-soft); color:var(--brand-dark); }
+    .button.primary { border-color:var(--brand); background:var(--brand); color:#fff; }
+    .layout { max-width:1180px; margin:0 auto; padding:38px 24px 72px; display:grid;
+      grid-template-columns:250px minmax(0,1fr); gap:28px; align-items:start; }
+    .sidebar { position:sticky; top:88px; max-height:calc(100vh - 112px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:15px;
+      background:var(--surface); box-shadow:var(--shadow); }
+    .sidebar strong { display:block; margin-bottom:9px; font-size:13px; color:var(--ink-2); }
+    .sidebar a { display:block; padding:8px 10px; border-radius:8px; color:var(--ink-2); text-decoration:none; }
+    .sidebar a:hover { background:var(--brand-soft); color:var(--brand-dark); }
+    main { min-width:0; }
+    .hero { padding:32px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface);
+      box-shadow:var(--shadow); overflow:hidden; position:relative; }
+    .hero::after { content:"?"; position:absolute; right:28px; top:-42px; color:color-mix(in srgb, var(--brand) 5.5%, transparent);
+      font:700 190px/1 Georgia,serif; pointer-events:none; }
+    .eyebrow { display:inline-flex; padding:4px 10px; border-radius:999px; background:var(--brand-soft);
+      color:var(--brand-dark); font-size:12px; font-weight:750; letter-spacing:.06em; }
+    h1 { margin:13px 0 8px; font-size:clamp(28px,4vw,42px); line-height:1.2; letter-spacing:-.03em; }
+    .hero p { max-width:760px; margin:0; color:var(--ink-2); font-size:16px; }
+    .flow { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:24px; }
+    .flow div { padding:13px; border:1px solid var(--line); border-radius:11px; background:var(--surface-soft); }
+    .flow b { display:block; color:var(--brand-dark); font-size:12px; }
+    .flow span { font-size:13px; color:var(--ink-2); }
+    .notice { margin:20px 0; padding:14px 16px; border:1px solid var(--warning-line); border-radius:12px;
+      background:var(--warning-soft); color:var(--warning); }
+    .notice.safe { border-color:var(--success-line); background:var(--success-soft); color:var(--success); }
+    section.help-section { margin-top:22px; padding:26px; border:1px solid var(--line); border-radius:var(--radius);
+      background:var(--surface); box-shadow:var(--shadow-xs); scroll-margin-top:84px; }
+    .section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:16px; }
+    .section-head h2 { margin:0 0 3px; font-size:22px; line-height:1.35; }
+    .section-head p { margin:0; color:var(--ink-2); }
+    .tag { flex:none; padding:4px 9px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line);
+      color:var(--ink-2); font-size:12px; }
+    .steps { margin:0; padding-left:23px; }
+    .steps li { padding:5px 0 8px 4px; }
+    .steps li::marker { color:var(--brand); font-weight:800; }
+    .field { display:inline-block; padding:1px 7px; border:1px solid var(--line); border-radius:6px;
+      background:var(--surface-2); color:var(--ink); font:600 13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .official { margin-top:16px; display:flex; flex-wrap:wrap; gap:9px; }
+    .official a { display:inline-flex; align-items:center; gap:5px; padding:7px 11px; border:1px solid var(--brand-line);
+      border-radius:8px; background:var(--brand-soft); font-weight:650; text-decoration:none; }
+    .quick-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .quick-card { padding:16px; border:1px solid var(--line); border-radius:12px; background:var(--surface-2); }
+    .quick-card h3 { margin:0 0 5px; font-size:15px; }
+    .quick-card p { margin:0 0 9px; color:var(--ink-2); font-size:13px; }
+    .quick-card a { font-weight:700; text-decoration:none; }
+    .checklist { margin:0; padding-left:22px; }
+    .checklist li { margin:5px 0; }
+    .help-callout { margin-top:15px; padding:12px 14px; border-left:4px solid var(--brand); border-radius:7px; background:var(--brand-soft); color:var(--ink); }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border:1px solid var(--line); border-radius:12px; }
+    th,td { padding:11px 13px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:var(--surface-2); font-size:13px; color:var(--ink-2); }
+    tr:last-child td { border-bottom:0; }
+    details { border-top:1px solid var(--line); padding:13px 0; }
+    details:first-of-type { border-top:0; }
+    summary { cursor:pointer; font-weight:700; }
+    details p { margin:7px 0 0; color:var(--ink-2); }
+    .footer { margin-top:26px; text-align:center; color:var(--ink-2); font-size:13px; }
+    @media (max-width:900px) { .layout { grid-template-columns:1fr; } .sidebar { position:static; display:none; }
+      .flow { grid-template-columns:1fr 1fr; } }
+    @media (max-width:560px) { .layout,.topbar-inner { padding-left:15px; padding-right:15px; }
+      .layout { padding-top:20px; } .hero,section.help-section { padding:20px; } .flow { grid-template-columns:1fr; }
+      .section-head { flex-direction:column; } table { display:block; overflow-x:auto; } .topbar-inner { align-items:flex-start; }
+      .quick-grid { grid-template-columns:1fr; }
+      .brand { padding-top:4px; } }
+
+    /* 与管理后台统一的帮助中心外观 */
+    body { background:var(--bg); color:var(--ink); font:14px/1.7 "PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .topbar { height:58px; border-bottom:1px solid var(--line); background:var(--surface); backdrop-filter:none; box-shadow:var(--shadow-xs); }
+    .topbar-inner { max-width:none; min-height:58px; padding:0 24px; }
+    .brand { gap:11px; color:var(--ink); }
+    .brand-mark { width:32px; height:32px; border-radius:8px; background:var(--brand); box-shadow:none; }
+    .brand-copy { display:grid; gap:1px; line-height:1.2; }
+    .brand-copy strong { font-size:14px; }
+    .brand-copy small { color:var(--ink-3); font-size:11px; font-weight:400; }
+    .button { min-height:34px; padding:6px 12px; border-color:var(--line); border-radius:7px; background:var(--surface-soft); color:var(--ink); font-size:12px; cursor:pointer; }
+    .button:hover { border-color:var(--brand-line); background:var(--brand-soft); color:var(--brand-hover); }
+    .button.primary { border-color:var(--brand); background:var(--brand); color:#fff; }
+    .layout { max-width:1380px; grid-template-columns:250px minmax(0,1fr); gap:20px; padding:20px 24px 52px; }
+    .sidebar { top:78px; max-height:calc(100vh - 98px); padding:10px 0; border-color:var(--side-line); border-radius:10px; background:var(--side-bg); box-shadow:var(--shadow-xs); }
+    .tree-title { display:block; padding:8px 16px 10px; color:var(--side-muted); font-size:11px; font-weight:600; letter-spacing:.08em; }
+    .help-nav-group { margin:0; padding:0; border:0; }
+    .help-nav-group + .help-nav-group { border-top:1px solid color-mix(in srgb,var(--side-line) 74%,transparent); }
+    .help-nav-group > summary { position:relative; display:flex; align-items:center; min-height:42px; padding:10px 14px 10px 32px; color:var(--side-muted); font-size:13px; font-weight:600; cursor:pointer; list-style:none; user-select:none; }
+    .help-nav-group > summary::-webkit-details-marker { display:none; }
+    .help-nav-group > summary::before { content:""; position:absolute; left:17px; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:5px solid currentColor; transition:transform var(--t-fast); }
+    .help-nav-group[open] > summary::before { transform:rotate(90deg); }
+    .help-nav-group > summary:hover { color:var(--side-text); background:rgba(255,255,255,.04); }
+    .help-nav-group.has-active > summary { color:#fff; background:rgba(255,255,255,.05); }
+    .sidebar .help-nav-link { position:relative; display:block; min-height:38px; margin:1px 0; padding:9px 14px 9px 42px; border-left:3px solid transparent; border-radius:0; color:var(--side-muted); font-size:12px; text-decoration:none; }
+    .sidebar .help-nav-link::before { content:""; position:absolute; left:28px; top:17px; width:4px; height:4px; border-radius:50%; background:currentColor; opacity:.55; }
+    .sidebar .help-nav-link:hover { background:rgba(255,255,255,.06); color:#fff; }
+    .sidebar .help-nav-link.active { border-left-color:var(--brand); background:var(--side-active); color:#fff; font-weight:600; }
+    .sidebar .help-nav-link.active::before { background:var(--brand); opacity:1; }
+    main { min-width:0; }
+    .hero { padding:24px 26px; border-color:var(--line); border-radius:12px; background:var(--surface); box-shadow:var(--shadow-xs); }
+    .hero::after { right:20px; top:-28px; color:color-mix(in srgb,var(--brand) 6%,transparent); font-size:150px; }
+    .eyebrow { background:var(--brand-soft); color:var(--brand-hover); }
+    h1 { margin:9px 0 6px; font-size:28px; letter-spacing:-.02em; }
+    .hero p { max-width:800px; color:var(--ink-2); font-size:14px; }
+    .flow { gap:8px; margin-top:18px; }
+    .flow div { padding:11px 12px; border-color:var(--line); border-radius:8px; background:var(--surface-soft); }
+    .flow b { color:var(--brand-hover); }
+    .flow span { color:var(--ink-2); font-size:12px; }
+    .notice { margin:14px 0; border-color:var(--warning-line); border-radius:9px; background:var(--warning-bg); color:var(--warning); }
+    .notice.safe { border-color:var(--success-line); background:var(--success-bg); color:var(--success); }
+    section.help-section { margin-top:14px; padding:22px 24px; border-color:var(--line); border-radius:12px; background:var(--surface); box-shadow:var(--shadow-xs); scroll-margin-top:74px; }
+    .section-head { margin-bottom:14px; }
+    .section-head h2 { color:var(--ink); font-size:18px; }
+    .section-head p { color:var(--ink-2); font-size:13px; }
+    .tag { border-color:var(--line); background:var(--surface-soft); color:var(--ink-2); }
+    .quick-card { border-color:var(--line); border-radius:9px; background:var(--surface-soft); }
+    .quick-card h3 { color:var(--ink); }
+    .quick-card p { color:var(--ink-2); }
+    a { color:var(--brand-hover); }
+    .field { border-color:var(--line); background:var(--surface-soft); color:var(--ink); }
+    .official a { border-color:var(--brand-line); border-radius:7px; background:var(--brand-soft); color:var(--brand-hover); }
+    .help-callout { border-left-color:var(--brand); background:var(--brand-soft); color:var(--ink); }
+    table { border-color:var(--line); border-radius:9px; }
+    th,td { border-bottom-color:var(--line); }
+    th { background:var(--surface-soft); color:var(--ink-2); }
+    details:not(.help-nav-group) { border-top-color:var(--line); }
+    details:not(.help-nav-group) p { color:var(--ink-2); }
+    .footer { color:var(--ink-3); }
+    [data-theme="dark"] .button.primary { color:#0b1220; }
+    [data-theme="dark"] .hero::after { color:rgba(24,144,255,.07); }
+    @media (max-width:900px) {
+      .layout { grid-template-columns:1fr; padding:14px 12px 40px; }
+      .sidebar { position:static; display:block; max-height:none; }
+      .tree-title { padding-bottom:6px; }
+    }
+    @media (max-width:560px) {
+      .topbar { height:auto; }
+      .topbar-inner { min-height:58px; padding:9px 12px; align-items:center; }
+      .brand-copy small { display:none; }
+      .layout { padding-top:12px; }
+      .hero,section.help-section { padding:18px; }
+      h1 { font-size:23px; }
+      .top-actions .button { padding:6px 9px; }
+    }
+    /* ===== P2-13 帮助中心站内搜索 ===== */
+  .help-search { margin-top: 22px; display: flex; flex-direction: column; gap: 8px; }
+  .help-search input {
+    width: 100%; max-width: 520px; padding: 11px 14px; font-size: 15px;
+    border: 1px solid var(--line, #ddd); border-radius: 10px; background: var(--surface, #fff);
+    color: inherit; outline: none;
+  }
+  .help-search input:focus { border-color: var(--accent, #2f80ed); box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.12); }
+  .help-search-count { font-size: 13px; color: var(--muted, #888); }
+  .help-search mark { background: rgba(255, 214, 90, 0.55); color: inherit; padding: 0 2px; border-radius: 3px; }
+  section.help-section.search-hidden { display: none; }
+  .hero .help-search + .notice { margin-top: 14px; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="brand-mark">昇</span><span class="brand-copy"><strong>AI 运营中心</strong><small>管理后台帮助中心</small></span></div>
+      <div class="top-actions">
+        <button id="theme-toggle" type="button" class="button" aria-label="切换显示主题">☾ 深色</button>
+        <a class="button primary" href="/admin.html" onclick="return backToAdmin(event)">返回后台</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" aria-label="本页目录">
+      <span class="tree-title">帮助目录</span>
+      <details class="help-nav-group" open>
+        <summary>开始使用</summary>
+        <a class="help-nav-link" href="#operations">快速开始</a>
+      </details>
+      <details class="help-nav-group">
+        <summary>业务资料管理</summary>
+        <a class="help-nav-link" href="#projects">项目与业务资料</a>
+        <a class="help-nav-link" href="#knowledge">知识库与向量</a>
+      </details>
+      <details class="help-nav-group">
+        <summary>AI 运营</summary>
+        <a class="help-nav-link" href="#ai-strategy">AI 策略与调优</a>
+        <a class="help-nav-link" href="#quality">对话质量评测</a>
+      </details>
+      <details class="help-nav-group">
+        <summary>账号与权限</summary>
+        <a class="help-nav-link" href="#accounts">账号与数据范围</a>
+      </details>
+      <details class="help-nav-group">
+        <summary>模型与接口</summary>
+        <a class="help-nav-link" href="#overview">接口配置清单</a>
+        <a class="help-nav-link" href="#chat-models">聊天模型与主备</a>
+        <a class="help-nav-link" href="#dashscope">通义千问 / 百炼</a>
+        <a class="help-nav-link" href="#tencent-map">腾讯地图</a>
+        <a class="help-nav-link" href="#asr">腾讯云语音识别</a>
+      </details>
+      <details class="help-nav-group">
+        <summary>连接企业微信</summary>
+        <a class="help-nav-link" href="#wecom">微信客服接入</a>
+      </details>
+      <details class="help-nav-group">
+        <summary>排查与安全</summary>
+        <a class="help-nav-link" href="#troubleshooting">常见问题</a>
+        <a class="help-nav-link" href="#security">安全注意事项</a>
+      </details>
+    </nav>
+
+    <main>
+      <article class="hero">
+        <span class="eyebrow">按需查看</span>
+        <h1>管理后台帮助中心</h1>
+        <p>操作页面只保留必要信息。完整流程、数据来源、规则口径和故障排查统一放在这里；从后台右上角进入时会自动定位到当前模块。</p>
+        <div class="flow" aria-label="后台操作流程">
+          <div><b>01 找到模块</b><span>从当前页面直达说明</span></div>
+          <div><b>02 完成配置</b><span>只填写必要字段</span></div>
+          <div><b>03 执行检查</b><span>测试真实运行结果</span></div>
+          <div><b>04 排查问题</b><span>按状态和提示处理</span></div>
+        </div>
+        <div class="help-search">
+          <input id="help-search-input" type="search" placeholder="搜索帮助内容，如：退款、向量、密钥、转人工、白名单" aria-label="搜索帮助内容">
+          <span id="help-search-count" class="help-search-count" role="status" aria-live="polite"></span>
+        </div>
+      </article>
+
+      <div class="notice safe">本帮助页不读取、展示或保存任何密钥。涉及第三方平台的额度和页面位置，请以平台当日显示为准。</div>
+
+      <section id="operations" class="help-section">
+        <div class="section-head"><div><h2>快速开始</h2><p>按你要完成的工作选择入口，不需要从头阅读整份帮助。</p></div><span class="tag">常用入口</span></div>
+        <div class="quick-grid">
+          <div class="quick-card"><h3>更新项目、价格或门店</h3><p>项目中心是业务资料的主要维护入口。</p><a href="#projects">查看项目维护规则 →</a></div>
+          <div class="quick-card"><h3>上传或更新知识</h3><p>查看启停、冲突治理和向量重建说明。</p><a href="#knowledge">查看知识库说明 →</a></div>
+          <div class="quick-card"><h3>修改 AI 行为</h3><p>策略配置负责长期规则，调优中心负责测试。</p><a href="#ai-strategy">查看策略与调优 →</a></div>
+          <div class="quick-card"><h3>检查回答质量</h3><p>区分规则风险扫描、语义评分和人工复核。</p><a href="#quality">查看评测口径 →</a></div>
+          <div class="quick-card"><h3>接入企业微信</h3><p>按企业配置凭证、回调和微信客服号。</p><a href="#wecom">查看企微接入 →</a></div>
+          <div class="quick-card"><h3>配置外部接口</h3><p>查找模型、地图、语音等接口参数来源。</p><a href="#overview">查看接口清单 →</a></div>
+        </div>
+      </section>
+
+      <section id="projects" class="help-section">
+        <div class="section-head"><div><h2>项目与业务资料</h2><p>价格、标准话术、图片和支持门店尽量在项目中心集中维护。</p></div><span class="tag">业务权威来源</span></div>
+        <ol class="steps">
+          <li><strong>主项目</strong>显示在客户首页；<strong>子项目</strong>归入主项目，但可维护自己的报价、话术、图片和门店。</li>
+          <li>客户提到子项目名称或别名时，系统优先使用该子项目资料；父项目不会覆盖子项目的独立报价。</li>
+          <li>项目价格以项目中心为准。修改报价后无需再逐份修改 FAQ，知识库中的动态价格内容会按治理规则处理。</li>
+          <li>新建项目、图片和门店时先选择企业及客服号归属；已有资料的归属不会因顶部选择变化而自动修改。</li>
+          <li>门店先维护城市和区县，再关联到支持的项目；项目只会推荐已经关联的门店。</li>
+        </ol>
+        <div class="help-callout">日常价格更新只改项目中心。知识库适合维护项目原理、流程和常见问题，不应作为活动价格的第二套维护源。</div>
+        <div class="official"><a href="/admin.html?tab=projects">前往项目中心 →</a><a href="/admin.html?tab=store">前往门店管理 →</a></div>
+      </section>
+
+      <section id="knowledge" class="help-section">
+        <div class="section-head"><div><h2>知识库与向量</h2><p>管理文档内容、启用状态、检索效果和向量索引。</p></div><span class="tag">内容与检索</span></div>
+        <ol class="steps">
+          <li>上传后先检查切片内容和归属范围，再决定是否启用；系统不会替你启用已停用知识。</li>
+          <li>项目价格、服务范围等结构化事实与知识文本冲突时，以项目中心的已发布数据为准。</li>
+          <li>修改知识内容后，按页面提示更新索引；“重建全部向量”只在全部成功后替换旧索引。</li>
+          <li>更换向量模型时，系统会先用新模型重建已有知识，成功后再切换；失败时继续使用旧模型和旧索引。</li>
+          <li>可用单条知识测试或 AI 调优中心检查召回、采用结果和最终回答。</li>
+        </ol>
+        <div class="official"><a href="/admin.html?tab=kb">前往知识库 →</a><a href="/admin.html?tab=aidev">前往 AI 调优中心 →</a></div>
+      </section>
+
+      <section id="ai-strategy" class="help-section">
+        <div class="section-head"><div><h2>AI 策略与调优</h2><p>策略配置负责长期生效的规则，调优中心用于修改前后的验证。</p></div><span class="tag">先测试再发布</span></div>
+        <ol class="steps">
+          <li>AI 策略中的修改先成为草稿；点击“发布”后才作用于网页和企微真实对话。</li>
+          <li>数值项按页面显示的最小值、最大值和步进填写；问号提示解释数值增大或减小的影响。</li>
+          <li>首页文案和禁说词有独立维护页；禁说词修改后同样需要发布。</li>
+          <li>AI 调优中心默认只模拟路由、检索和 Prompt，不写入真实会话、预约或坐席数据。</li>
+          <li>重要策略调整后运行回归用例，确认期望路由、回答要点、禁止内容和权威来源都通过。</li>
+          <li>转人工相关开关也在策略配置中：网页坐席工作台（默认封存）、人工粘性（humanHoldAfterHandoff）、转人工推送客户画像（profilePushEnabled，需自建应用 AgentId）、检索精排（Rerank，需通义 Key）。</li>
+        </ol>
+        <div class="official"><a href="/admin.html?tab=aiconfig">前往 AI 策略配置 →</a><a href="/admin.html?tab=aidev">前往 AI 调优中心 →</a></div>
+      </section>
+
+      <section id="quality" class="help-section">
+        <div class="section-head"><div><h2>对话质量评测</h2><p>质量统计只使用成功完成语义评分的记录。</p></div><span class="tag">评分口径</span></div>
+        <table>
+          <thead><tr><th>结果</th><th>含义</th><th>是否进入质量统计</th></tr></thead>
+          <tbody>
+            <tr><td>规则风险分</td><td>确定性规则发现的已知风险，用于排序和排查；未命中不代表满分。</td><td>否</td></tr>
+            <tr><td>AI 语义质量分</td><td>评测模型结合完整上下文给出的七维质量评分。</td><td>是</td></tr>
+            <tr><td>人工复核</td><td>管理员确认、否定或调整评分，并保留复核记录。</td><td>使用复核后的有效结果</td></tr>
+          </tbody>
+        </table>
+        <ol class="steps">
+          <li>“待语义评分”表示只有规则扫描结果，不能当成最终质量分。</li>
+          <li>重评时可以选择评测模型；按钮显示“正在评测中”期间不要重复提交。</li>
+          <li>评测失败会保留上一次有效评分和失败原因；可按失败状态筛选后重试。</li>
+          <li>人工复核完成的记录仍保留，可通过“已人工复核”筛选查看。</li>
+        </ol>
+        <div class="official"><a href="/admin.html?tab=quality">前往质量评测 →</a></div>
+      </section>
+
+      <section id="accounts" class="help-section">
+        <div class="section-head"><div><h2>账号、权限与数据范围</h2><p>登录能力、功能权限和企微数据范围是三件不同的事。</p></div><span class="tag">最小权限</span></div>
+        <ul class="checklist">
+          <li><strong>客服账号（坐席）已封存</strong>：人工接待已迁移至企业微信原生接待，网页坐席工作台默认停用，坐席账号登录会被拒绝。如需临时恢复，可在 AI 策略配置开启“网页坐席工作台”。</li>
+          <li>人工接待由<strong>企业微信接待成员</strong>承担：在企微管理后台把成员加入客服账号并配置接待规则；转人工时企微自动分配，接待成员在企微客户端直接回复客户。</li>
+          <li><strong>管理员</strong>按勾选的模块权限使用后台；超级管理员固定拥有全部权限。删除会话需要单独的“会话删除”权限，与查看权限分开授予。</li>
+          <li>选择企业但不选客服号，表示可访问该企业下全部客服号；勾选具体客服号则只允许所选范围。</li>
+          <li>客服、管理员和超级管理员的登录账号不能重复。</li>
+        </ul>
+        <div class="official"><a href="/admin.html?tab=agents">前往客服账号 →</a><a href="/admin.html?tab=admins">前往管理员账号 →</a></div>
+      </section>
+
+      <section id="overview" class="help-section">
+        <div class="section-head"><div><h2>接口配置清单</h2><p>先确认每一项在系统中的用途，避免申请错产品。</p></div><span class="tag">按需配置</span></div>
+        <table>
+          <thead><tr><th>后台字段</th><th>作用</th><th>是否必需</th></tr></thead>
+          <tbody>
+            <tr><td>聊天模型：名称、Base URL、模型标识、API Key</td><td>客户对话生成；可自行添加并指定主模型/备用模型</td><td>主备各一套，均建议可用</td></tr>
+            <tr><td>通义千问 API Key</td><td>知识库向量化和图片理解</td><td>使用知识库/图片能力时必需</td></tr>
+            <tr><td>腾讯地图 Key</td><td>地址解析、门店坐标与地址名片</td><td>使用门店定位时必需</td></tr>
+            <tr><td>腾讯云 ASR SecretId / SecretKey</td><td>把客户语音消息转成文字</td><td>需要语音识别时配置</td></tr>
+            <tr><td>企微 CorpID、应用 Secret、Token、AESKey</td><td>微信客服收发消息；在“企业微信接入”中按企业维护</td><td>接入企微客服时必需</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="chat-models" class="help-section">
+        <div class="section-head"><div><h2>聊天模型与主备设置</h2><p>不再固定绑定某一家平台；任何兼容 OpenAI Chat Completions 协议的模型都可以加入列表。</p></div><span class="tag">可自由切换</span></div>
+        <ol class="steps">
+          <li>在模型平台官网注册、实名认证并开通 API 服务，然后创建 API Key。完整 Key 通常只展示一次，请立即妥善保存。</li>
+          <li>从平台文档找到 <span class="field">API Base URL</span> 和 <span class="field">模型标识</span>。Base URL 是接口根地址，例如 <span class="field">https://api.deepseek.com/v1</span>，不要填写完整的 <span class="field">/chat/completions</span> 路径。</li>
+          <li>进入“模型管理”，点击“添加新模型”，填写显示名称、Base URL、模型标识和 API Key。协议必须兼容 OpenAI；外部接口必须使用 HTTPS。</li>
+          <li>新增时可以直接选择“主模型”“备用模型”或“普通候选”。也可以保存后在列表中点击“设为主模型 / 设为备用”。</li>
+          <li>点击“综合测试”验证基础推理和质量评测能力。测试不会改变主备角色，也不会在失败后改用其他模型。</li>
+          <li>正常对话优先调用主模型；主模型报错、超时、限流或额度不足时，系统自动调用当前备用模型。质量评测页面也会显示当前主备模型的实际名称。</li>
+        </ol>
+        <table>
+          <thead><tr><th>示例平台</th><th>常用 Base URL</th><th>模型标识示例</th></tr></thead>
+          <tbody>
+            <tr><td>DeepSeek</td><td><span class="field">https://api.deepseek.com/v1</span></td><td><span class="field">deepseek-v4-flash</span>（或 deepseek-v4-pro；deepseek-chat 已于 2026-07-24 停用）</td></tr>
+            <tr><td>智谱开放平台</td><td><span class="field">https://open.bigmodel.cn/api/paas/v4</span></td><td><span class="field">glm-4-flash</span>（以控制台当日可用模型为准）</td></tr>
+          </tbody>
+        </table>
+        <div class="notice safe">免费额度、免费模型、并发和限流规则会变化。备用模型也必须有可用 Key 和额度，否则主模型失败时无法兜底。</div>
+        <details><summary>模型运行指标怎么看？</summary><p>缓存命中表示复用了已缓存回答，通常可降低模型调用成本；熔断表示主模型连续失败后暂时由备用模型接管；模型调用占比、缓存趋势和运行计数从当前服务进程启动后累计，重启后重新计数。</p></details>
+        <div class="official">
+          <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">DeepSeek API Keys ↗</a>
+          <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener noreferrer">智谱 API Keys ↗</a>
+          <a href="/admin.html?tab=models">前往模型管理 →</a>
+        </div>
+      </section>
+
+      <section id="dashscope" class="help-section">
+        <div class="section-head"><div><h2>通义千问 / 阿里云百炼 API Key</h2><p>用于知识库向量化、图片识别等能力。</p></div><span class="tag">知识与视觉</span></div>
+        <ol class="steps">
+          <li>登录阿里云，进入百炼（Model Studio），按提示开通模型服务。</li>
+          <li>在 API Key 管理页面创建新的 Key。建议使用公司账号，并区分开发和生产环境。</li>
+          <li>复制 Key，填写到后台的 <span class="field">通义千问 API Key</span>。</li>
+          <li>上传一份测试知识和一张测试图片，确认向量化、检索和图片理解均可用。</li>
+        </ol>
+        <div class="official">
+          <a href="https://help.aliyun.com/zh/model-studio/get-api-key" target="_blank" rel="noopener noreferrer">官方获取 API Key 说明 ↗</a>
+          <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener noreferrer">阿里云百炼控制台 ↗</a>
+        </div>
+      </section>
+
+      <section id="tencent-map" class="help-section">
+        <div class="section-head"><div><h2>腾讯地图 Key</h2><p>用于门店地址解析、经纬度和地址名片能力。</p></div><span class="tag">门店定位</span></div>
+        <ol class="steps">
+          <li>注册腾讯位置服务开发者账号并完成认证。</li>
+          <li>进入“应用管理 → 我的应用”，先创建一个应用，例如 <span class="field">AI客服门店定位</span>。</li>
+          <li>在应用中创建 Key，选择服务器端需要的 WebService API 能力。</li>
+          <li>按实际部署服务器设置安全限制；不要把生产 Key 限制为本地电脑 IP。</li>
+          <li>复制 Key 到 <span class="field">腾讯地图 Key</span>，随后在门店页面测试地址解析。</li>
+        </ol>
+        <div class="official"><a href="https://lbs.qq.com/dev/console/application/mine" target="_blank" rel="noopener noreferrer">腾讯位置服务应用管理 ↗</a></div>
+      </section>
+
+      <section id="asr" class="help-section">
+        <div class="section-head"><div><h2>腾讯云语音识别凭证</h2><p>需要同时填写 SecretId 和 SecretKey。</p></div><span class="tag">语音转文字</span></div>
+        <ol class="steps">
+          <li>登录腾讯云，在语音识别控制台开通 ASR 服务，并确认所在账号有可用额度。</li>
+          <li>进入“访问管理 CAM → API 密钥管理”。生产环境建议创建专用子账号，并只授予语音识别所需权限。</li>
+          <li>创建访问密钥，分别复制 <span class="field">SecretId</span> 和 <span class="field">SecretKey</span>。</li>
+          <li>在“其他接口”中分别填入两个字段，不要填反。SecretKey 通常只完整展示一次。</li>
+          <li>通过真实企微语音消息测试转写效果；方言、噪声和过短音频会影响准确率。</li>
+        </ol>
+        <div class="official">
+          <a href="https://console.cloud.tencent.com/asr" target="_blank" rel="noopener noreferrer">腾讯云语音识别控制台 ↗</a>
+          <a href="https://console.cloud.tencent.com/cam/capi" target="_blank" rel="noopener noreferrer">腾讯云 API 密钥管理 ↗</a>
+        </div>
+      </section>
+
+      <section id="wecom" class="help-section">
+        <div class="section-head"><div><h2>多企业微信客服接入</h2><p>当前只支持“企业微信接管微信客服 → 开启 API → 企业内部开发”模式。</p></div><span class="tag">一企业一套凭证</span></div>
+        <ol class="steps">
+          <li>在企业微信管理后台进入“应用管理 → 微信客服”，确认微信客服已由企业微信接管并开启 API。微信客服独立版（kf.weixin.qq.com）的凭证不能用于本系统。</li>
+          <li><span class="field">CorpID</span>：企业微信管理后台“我的企业 → 企业信息”中获取。</li>
+          <li><span class="field">接口调用应用 Secret</span>：新接入应使用已加入“微信客服 → 可调用接口的应用”的自建应用 Secret，不能使用旧版微信客服系统应用 Secret 或未授权应用的 Secret。</li>
+          <li><span class="field">回调 Token</span> 与 <span class="field">EncodingAESKey</span>：在配置微信客服接收消息服务器时设置，必须与本系统保存值完全一致。</li>
+          <li>先用三步向导创建并启用企业，再点击“从企微同步客服号”；新同步账号默认停用，检查业务范围和欢迎语后手动启用。</li>
+          <li>把系统生成的 <span class="field">/kf/callback/{企业编码}</span> 专属地址填写到企业微信后台。</li>
+          <li>点击“一键检查接入状态”。“配置已通过”表示凭证和权限正常；向客服号发送测试消息并收到有效回调后才会显示“已连接”。</li>
+          <li><span class="field">open_kfid</span> 优先通过自动同步获取；只有自动同步不可用时才建议手动添加。</li>
+          <li><strong>配置接待成员（转人工的前提）</strong>：在企微管理后台该客服账号中添加接待成员并设置接待规则。客户转人工时，系统调用企微转接接口且不指定成员，由企微按接待规则自动分配；接待成员在企微客户端的“微信客服”应用中直接回复客户。</li>
+        </ol>
+        <div class="notice">人工接待有粘性：转人工后 AI 不再插话，接待结束也不会自动恢复自动应答——只有接待成员在企微客户端把会话转回“智能助手”才会恢复（可用 agent.humanHoldAfterHandoff 关闭粘性）。转人工分配后，系统可把客户画像摘要推送给接待成员（agent.profilePushEnabled，需配置 wecom.appAgentId）。</div>
+        <div class="notice">不要再使用旧地址 <span class="field">/kf/callback</span>。系统已统一为多企业模式，该地址不会接收回调。</div>
+        <div class="official">
+          <a href="https://work.weixin.qq.com/wework_admin/frame" target="_blank" rel="noopener noreferrer">企业微信管理后台 ↗</a>
+          <a href="https://developer.work.weixin.qq.com/document/path/94638" target="_blank" rel="noopener noreferrer">微信客服官方 API 文档 ↗</a>
+          <a href="/admin.html?tab=wecom">前往企业微信接入 →</a>
+        </div>
+      </section>
+
+      <section id="troubleshooting" class="help-section">
+        <div class="section-head"><div><h2>常见问题</h2><p>保存成功不等于第三方接口一定可用，可按下面顺序排查。</p></div></div>
+        <details open><summary>提示“密钥无效”或 401</summary><p>检查是否复制了多余空格、是否把 Key 名称当成 Key 值、密钥是否被删除，以及开发和生产账号是否混用。</p></details>
+        <details><summary>提示“额度不足”或限流</summary><p>登录对应平台查看余额、免费额度、并发限制和账单。备用模型只有在自身也有可用额度时才能兜底。</p></details>
+        <details><summary>企微回调验证失败</summary><p>确认使用公网 HTTPS 地址，路径包含正确企业编码，并逐字核对 CorpID、Token 和 43 位 EncodingAESKey。</p></details>
+        <details><summary>企微能回调但不能发送消息</summary><p>重点检查是否误用了普通应用 Secret、客服号 open_kfid 是否属于当前企业、客服号是否启用，以及企微会话发送窗口限制。</p></details>
+        <details><summary>腾讯地图地址解析失败</summary><p>确认 Key 已开通 WebService API，安全限制包含实际服务器出口 IP，并检查地址是否包含城市和区县。</p></details>
+      </section>
+
+      <section id="security" class="help-section">
+        <div class="section-head"><div><h2>安全注意事项</h2><p>接口密钥等同于账号密码，应按生产凭证管理。</p></div><span class="tag">必须遵守</span></div>
+        <ul>
+          <li>不要通过微信群、普通邮件或截图发送 Secret、Token、AESKey。</li>
+          <li>开发环境和生产环境使用不同密钥，员工离职或疑似泄露后立即轮换。</li>
+          <li>优先使用公司主体账号、专用子账号和最小权限，不使用个人账号长期承载生产服务。</li>
+          <li>保存后后台不会回显密钥原文；需要更换时直接输入新值覆盖。</li>
+          <li>不要把真实密钥写进 Git 仓库、部署文档、聊天记录或测试代码。</li>
+        </ul>
+      </section>
+
+      <p class="footer">AI 客服系统 · 管理后台帮助中心 · 页面不包含任何已保存密钥</p>
+    </main>
+  </div>
+  <script>
+    // 返回后台：帮助中心从后台新标签打开（target=_blank），而登录态存 sessionStorage（每标签独立），
+    // 直接跳 /admin.html 会因新标签无 token 被踢回登录页。有 opener 时聚焦原标签并关闭自己。
+    function backToAdmin(event) {
+      if (window.opener && !window.opener.closed) {
+        try { window.opener.focus(); } catch (error) { /* opener 跨域受限时忽略 */ }
+        window.close();
+        // 极少数浏览器拦截 close：window.closed 仍为 false 时放行默认跳转兜底
+        if (window.closed) { event.preventDefault(); return false; }
+      }
+      return true;
+    }
+    (() => {
+      const root = document.documentElement;
+      const themeButton = document.getElementById('theme-toggle');
+      const navLinks = [...document.querySelectorAll('.help-nav-link')];
+      const navGroups = [...document.querySelectorAll('.help-nav-group')];
+      const sections = [...document.querySelectorAll('section.help-section')];
+
+      const savedTheme = (() => {
+        try { return localStorage.getItem('aics_theme') || localStorage.getItem('aics_admin_theme') || ''; }
+        catch (error) { return ''; }
+      })();
+      let dark = savedTheme === 'dark';
+      const renderTheme = () => {
+        root.dataset.theme = dark ? 'dark' : 'light';
+        themeButton.textContent = dark ? '☀ 浅色' : '☾ 深色';
+      };
+      themeButton.addEventListener('click', () => {
+        dark = !dark;
+        try { localStorage.setItem('aics_theme', dark ? 'dark' : 'light'); } catch (error) { /* 私密模式下仅本页生效 */ }
+        renderTheme();
+      });
+      renderTheme();
+
+      const setActive = id => {
+        navLinks.forEach(link => {
+          const active = link.getAttribute('href') === '#' + id;
+          link.classList.toggle('active', active);
+          if (active) link.setAttribute('aria-current', 'page');
+          else link.removeAttribute('aria-current');
+        });
+        navGroups.forEach(group => {
+          const active = !!group.querySelector('a[href="#' + id + '"]');
+          group.classList.toggle('has-active', active);
+          if (active) group.open = true;
+        });
+      };
+
+      navLinks.forEach(link => link.addEventListener('click', () => setActive(link.hash.slice(1))));
+      window.addEventListener('hashchange', () => setActive(location.hash.slice(1) || 'operations'));
+      let scrollQueued = false;
+      window.addEventListener('scroll', () => {
+        if (scrollQueued) return;
+        scrollQueued = true;
+        requestAnimationFrame(() => {
+          const marker = window.scrollY + 110;
+          let current = sections[0] ? sections[0].id : 'operations';
+          sections.forEach(section => { if (section.offsetTop <= marker) current = section.id; });
+          setActive(current);
+          scrollQueued = false;
+        });
+      }, { passive:true });
+      setActive(location.hash.slice(1) || 'operations');
+    })();
+  </script>
+
+  <!-- P2-13 帮助中心站内搜索：过滤章节 + 命中高亮，支持 ?q= 带词跳转 -->
+  <script>
+    (function () {
+      'use strict';
+      const input = document.getElementById('help-search-input');
+      const count = document.getElementById('help-search-count');
+      if (!input || !count) return;
+      const sections = Array.from(document.querySelectorAll('section.help-section'));
+      let lastMarks = [];
+
+      const clearMarks = () => {
+        lastMarks.forEach(mark => {
+          const parent = mark.parentNode;
+          if (!parent) return;
+          parent.replaceChild(document.createTextNode(mark.textContent), mark);
+          parent.normalize();
+        });
+        lastMarks = [];
+      };
+
+      // 只包裹纯文本节点里的首个命中，避免破坏页面结构
+      const highlight = (section, keyword) => {
+        const lower = keyword.toLowerCase();
+        const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT, {
+          acceptNode: node => (node.parentNode.nodeName === 'SCRIPT' || !node.nodeValue.trim())
+            ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+        });
+        const targets = [];
+        while (walker.nextNode()) targets.push(walker.currentNode);
+        targets.forEach(node => {
+          const idx = node.nodeValue.toLowerCase().indexOf(lower);
+          if (idx < 0) return;
+          const mark = document.createElement('mark');
+          const rest = node.splitText(idx);
+          mark.textContent = rest.nodeValue.slice(0, keyword.length);
+          rest.nodeValue = rest.nodeValue.slice(keyword.length);
+          rest.parentNode.insertBefore(mark, rest);
+          lastMarks.push(mark);
+        });
+      };
+
+      const run = () => {
+        clearMarks();
+        const kw = input.value.trim().toLowerCase();
+        if (!kw) {
+          sections.forEach(s => s.classList.remove('search-hidden'));
+          count.textContent = '';
+          return;
+        }
+        let hits = 0;
+        sections.forEach(s => {
+          const match = s.textContent.toLowerCase().includes(kw);
+          s.classList.toggle('search-hidden', !match);
+          if (match) { hits++; highlight(s, kw); }
+        });
+        count.textContent = hits
+          ? '命中 ' + hits + ' 个章节'
+          : '没有匹配的章节，换个关键词试试';
+      };
+
+      input.addEventListener('input', run);
+      // 支持 /interface-help.html?q=关键词 直接带词打开
+      const q = new URLSearchParams(location.search).get('q');
+      if (q) { input.value = q; run(); input.focus(); }
+    })();
+  </script>
+</body>
+</html>

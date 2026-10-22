@@ -1,0 +1,32 @@
+# 一键启动 PostgreSQL + pgvector（向量数据库）
+# 用法：在本文件所在目录执行  docker compose up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aics-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在.env中配置数据库密码}
+      POSTGRES_DB: aics
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # 首次启动时自动执行建表脚本
+      - ./db-init:/docker-entrypoint-initdb.d
+      # 数据持久化，删容器不丢数据
+      - pgdata:/var/lib/postgresql/data
+
+  # 第 8~9 周新增：Redis（短期会话记忆缓存）
+  redis:
+    image: redis:7-alpine
+    container_name: aics-redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:

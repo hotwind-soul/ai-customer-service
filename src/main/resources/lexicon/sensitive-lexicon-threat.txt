@@ -1,0 +1,30 @@
+# Source: https://github.com/konsheng/Sensitive-lexicon
+# Revision: 5a8da94c61c160e203a6b2fcfafbea642404d50c (2026-06-15)
+# License: MIT; see Sensitive-lexicon-LICENSE.txt and Sensitive-lexicon-SOURCE.md
+# Scope: explicit violence or personal threats suitable for automatic human handoff.
+杀了你
+弄死你
+砍死你
+打死你
+捅死你
+干死你
+灭你全家
+杀你全家
+弄死你全家
+砍死你全家
+打断你的腿
+对着你来一枪
+对着你妈来一枪
+炸了你们
+烧了你们
+炸你们店
+烧你们店
+去你们店闹
+去店里砍人
+带刀去你们店
+堵你们门
+堵门
+报复你
+人肉你
+让你们付出代价
+炸学校

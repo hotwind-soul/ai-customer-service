@@ -1,0 +1,106 @@
+# AI 客服系统告警规则（配合 Prometheus 使用）
+# 指标来自应用 /actuator/prometheus（aics_* 为网关自定义指标）。
+# 用法：加入 Prometheus 的 rule_files，例如
+#   rule_files:
+#     - /etc/prometheus/rules/aics-alerts.yml
+
+groups:
+  - name: aics-availability
+    rules:
+      # 实例不可达：拨测或 Prometheus 抓取失败
+      - alert: AicsInstanceDown
+        expr: up{job="aics"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI 客服实例不可达"
+          description: "Prometheus 连续 1 分钟抓取不到 aics 实例（进程退出/端口未监听/网络故障）。"
+
+      # HTTP 5xx 占比超过 5%（持续 5 分钟）
+      - alert: AicsHttpServerErrorRateHigh
+        expr: >
+          sum(rate(http_server_requests_seconds_count{job="aics",status=~"5.."}[5m]))
+          / sum(rate(http_server_requests_seconds_count{job="aics"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP 5xx 错误率超过 5%"
+          description: "持续 5 分钟 5xx 占比过高，通常是数据库/Redis 不可用或代码异常。"
+
+  - name: aics-model-health
+    rules:
+      # 主模型熔断打开：全部流量已走备用模型，需要人工排查
+      - alert: AicsPrimaryCircuitOpen
+        expr: aics_primary_circuit_open == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "主模型熔断已打开超过 2 分钟"
+          description: "当前所有生成请求都由备用模型承担。排查主模型 Key/额度/网络，恢复后熔断自动关闭。"
+
+      # 降级频发：15 分钟内主备切换超过 5 次（偶发抖动不必告警）
+      - alert: AicsFailoverSpike
+        expr: increase(aics_failover_total[15m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "15 分钟内主备降级超过 5 次"
+          description: "主模型持续不稳定，备用模型承压。检查主模型额度与网络。"
+
+      # 空泛非回答激增：模型能通但答非所问，多为提示词/模型/知识库变化
+      - alert: AicsModelNonAnswerSpike
+        expr: sum(increase(aics_model_calls_total{action="non-answer"}[30m])) > 10
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "30 分钟内空泛非回答超过 10 次"
+          description: "模型连通但回答空洞。检查最近是否改过 Prompt/模型/知识库。"
+
+  - name: aics-retrieval
+    rules:
+      # 精排（Rerank）持续失败：已自动回退原序，但检索质量会下降
+      - alert: AicsRerankFailing
+        expr: increase(aics_rerank_total{result="fail"}[30m]) > 20
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "30 分钟内精排失败超过 20 次"
+          description: "已自动回退到精排前顺序，不影响可用性；检查 DashScope Key/额度。可先关闭 retrieval.rerankEnabled。"
+
+      # 检索零召回：客户提问但系统检索不到任何资料（知识库被清空/发布状态异常）
+      - alert: AicsRetrievalEmpty
+        expr: sum(increase(aics_retrieval_source_total{method="vector"}[30m])) == 0 and sum(increase(aics_model_calls_total{action="chat"}[30m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "有对话流量但检索持续零召回"
+          description: "知识库可能为空或全部处于非发布状态，AI 将只能拒答。"
+
+  - name: aics-cost
+    rules:
+      # token 消耗异常：阈值按实际业务量调整（示例为 1 小时 50 万 token）
+      - alert: AicsTokenBurnHigh
+        expr: sum(increase(aics_token_input_total[1h])) > 500000 or sum(increase(aics_token_output_total[1h])) > 500000
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "1 小时 token 消耗超过 50 万"
+          description: "可能是恶意刷量（限流被绕过）或检索池过大。结合 token.input.<模型> 定位是哪个模型。"
+
+      # 响应缓存命中率过低：缓存形同虚设，成本会被放大
+      - alert: AicsCacheHitRateLow
+        expr: sum(rate(aics_response_cache_total{result="hit"}[30m])) / clamp_min(sum(rate(aics_response_cache_total{result="lookup"}[30m])), 1e-9) < 0.05 and sum(rate(aics_response_cache_total{result="lookup"}[30m])) > 0.1
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "响应缓存命中率持续低于 5%"
+          description: "多轮对话场景命中率低属正常；持续过低建议检查缓存 TTL 与 Prompt 是否过度个性化。"

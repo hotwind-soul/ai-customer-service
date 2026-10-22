@@ -1,0 +1,79 @@
+# Source: https://github.com/konsheng/Sensitive-lexicon
+# Revision: 5a8da94c61c160e203a6b2fcfafbea642404d50c (2026-06-15)
+# License: MIT; see Sensitive-lexicon-LICENSE.txt and Sensitive-lexicon-SOURCE.md
+# Scope: only direct insults/personal attacks suitable for customer-service routing.
+# Ambiguous one-character and broad political/sexual/advertising terms are intentionally excluded.
+傻逼
+傻比
+傻B
+傻X
+煞逼
+煞笔
+沙比
+撒比
+二逼
+呆逼
+笨逼
+白痴
+弱智
+蠢货
+蠢蛋
+蠢猪
+废物
+垃圾客服
+垃圾机器人
+垃圾AI
+智障
+脑残
+妈的
+他妈的
+你他妈
+操你妈
+操你媽
+草你妈
+草你媽
+曹尼玛
+cao你妈
+擦你妈
+干你妈
+肏你
+你妈逼
+你媽逼
+你妈的
+日你妈
+日死你妈
+妈卖批
+妈批
+狗东西
+狗逼
+狗比
+狗日的
+狗娘养的
+狗娘養的
+狗杂种
+狗杂碎
+狗儿子
+狗屎
+畜生
+王八蛋
+混蛋
+杂种
+瘪三
+婊子养的
+婊子養的
+贱人
+贱货
+龟儿子
+龟孙子
+骚货
+死逼
+滚蛋
+滚开
+滚粗
+去死
+nmsl
+fuck you
+fuckyou
+fuck your mother
+bitch
+shit

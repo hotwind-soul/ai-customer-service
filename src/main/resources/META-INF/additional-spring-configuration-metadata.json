@@ -1,0 +1,44 @@
+{
+  "properties": [
+    {
+      "name": "aics.config-encryption-key",
+      "type": "java.lang.String",
+      "description": "32 字节随机值的 Base64；用于加密管理后台写入数据库的 API Key/Secret。"
+    },
+    {
+      "name": "aics.bootstrap-admin-password",
+      "type": "java.lang.String",
+      "description": "仅新库首次启动或替换历史默认密码时使用；成功启动后应从环境中删除。"
+    },
+    {
+      "name": "aics.public-base-url",
+      "type": "java.lang.String",
+      "description": "企微图文卡片的缩略图需要的公网 HTTPS 根地址。"
+    },
+    {
+      "name": "aics.bind-address",
+      "type": "java.lang.String",
+      "description": "本地默认只监听回环地址 127.0.0.1；容器内由环境变量改为 0.0.0.0。"
+    },
+    {
+      "name": "aics.forward-headers-strategy",
+      "type": "java.lang.String",
+      "description": "生产容器只允许本机 Caddy 访问时显式启用 FRAMEWORK。"
+    },
+    {
+      "name": "file.upload-dir",
+      "type": "java.lang.String",
+      "description": "图片本地存储目录（发送图片功能，相对项目根目录）。"
+    },
+    {
+      "name": "map.tencent.key",
+      "type": "java.lang.String",
+      "description": "腾讯地图 WebService key（lbs.qq.com 申请）；未配置时跳过地址解析。"
+    },
+    {
+      "name": "wecom.kf.asr-region",
+      "type": "java.lang.String",
+      "description": "腾讯云语音识别地域（企微语音消息转文字用）。"
+    }
+  ]
+}
